@@ -1,6 +1,7 @@
-title: Publication Similarity Network
-description: A similarity graph of Dario Rodighiero's publications, embedded from each paper's title and abstract and laid out offline.
-url: https://dariorodighiero.com
+# TODO: replace with the final workshop title (currently a working title).
+title: Network Design Workshop
+description: A four-day workshop on network design — turning a corpus of texts into a visual network as a way of knowing. Bolzano, July 6–9, 2026.
+url: https://rodighiero.github.io
 
 # Served as a GitHub Pages project site at rodighiero.github.io/publication-network/,
 # so baseurl scopes the font/asset URLs under the subpath. Clear it if you later
