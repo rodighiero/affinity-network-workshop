@@ -1,0 +1,6 @@
+# Python dependencies for scripts/build-network.py (the regeneration pipeline).
+# The layout step (scripts/layout-network.js) additionally needs Node.js on PATH.
+numpy
+pyyaml
+sentence-transformers
+transformers
