@@ -2,10 +2,10 @@ title: Publication Similarity Network
 description: A similarity graph of Dario Rodighiero's publications, embedded from each paper's title and abstract and laid out offline.
 url: https://dariorodighiero.com
 
-# If you deploy this as a GitHub Pages *project* site
-# (e.g. username.github.io/publication-network/), uncomment and set baseurl so
-# the font/asset URLs resolve under the subpath:
-# baseurl: "/publication-network"
+# Served as a GitHub Pages project site at rodighiero.github.io/publication-network/,
+# so baseurl scopes the font/asset URLs under the subpath. Clear it if you later
+# move the site to a domain root (custom domain).
+baseurl: "/publication-network"
 
 # _publications/ holds the source abstracts for scripts/build-network.py only;
 # Jekyll never renders them (underscore-prefixed dirs are excluded from the build).
