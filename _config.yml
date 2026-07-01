@@ -1,12 +1,12 @@
-# TODO: replace with the final workshop title (currently a working title).
-title: Network Design Workshop
+title: Affinity Network Workshop
 description: A four-day workshop on network design — turning a corpus of texts into a visual network as a way of knowing. Bolzano, July 6–9, 2026.
 url: https://rodighiero.github.io
 
 # Empty so `bundle exec jekyll serve` serves at http://localhost:4000/ with no
 # subpath. Production doesn't rely on this: the GitHub Pages workflow builds with
-# `--baseurl "/publication-network"` (the project subpath), which overrides this
-# value. If you ever build/deploy by hand instead of via CI, pass that flag too.
+# the project subpath (`--baseurl "/<repo-name>"`, derived automatically from the
+# Pages config), which overrides this value. If you build/deploy by hand, pass
+# that flag too.
 baseurl: ""
 
 # _publications/ holds the source abstracts for scripts/build-network.py only;
