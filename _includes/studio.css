@@ -141,34 +141,44 @@
 .stage-empty[hidden] { display: none; }
 .stage-empty span { font-size: var(--text-xxs); opacity: 0.8; }
 
-/* Stats overlay in the graph's top-right corner */
-.stats-overlay {
+/* Overlay stack pinned to the graph's top-right corner: download + stats */
+.stage-corner {
   position: absolute;
-  top: 0.6rem;
-  right: 0.6rem;
-  max-width: 15rem;
+  top: 0.7rem;
+  right: 0.7rem;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.7rem;
+  z-index: 3;
+  pointer-events: none;
+}
+.stage-corner[hidden] { display: none; }
+
+.stats-overlay {
+  max-width: 16rem;
   text-align: right;
-  font-size: var(--text-xxs);
-  line-height: 1.4;
+  font-size: var(--text-xs);
+  line-height: 1.5;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
-  pointer-events: none;
-  z-index: 2;
 }
-.stats-overlay[hidden] { display: none; }
 .stats-overlay span { display: block; }
 
-/* Build chrono */
-.studio-chrono {
-  margin: 0.9rem 0 0;
-  font-size: var(--text-xxs);
+/* Download controls (interactive, so re-enable pointer events) */
+.export-overlay {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  pointer-events: auto;
+}
+.export-label {
   text-transform: uppercase;
   letter-spacing: var(--tracking-caps);
+  font-size: var(--text-xxs);
   color: var(--muted);
-  font-variant-numeric: tabular-nums;
+  margin-right: 0.1rem;
 }
-.studio-chrono[hidden] { display: none; }
-.studio-chrono.done { color: var(--fg); }
 
 .studio-status {
   margin: 1rem 0 0;
@@ -281,23 +291,14 @@ html.dark .studio-status.error { color: #ff7a6b; }
 .switch-row:has(.switch-input:disabled) { cursor: default; }
 .switch-row:has(.switch-input:disabled) .switch-label { opacity: 0.5; }
 
-/* PNG export */
-.export-head {
-  margin: 0 0 0.5rem;
-  text-transform: uppercase;
-  letter-spacing: var(--tracking-caps);
-  font-size: var(--text-xxs);
-  color: var(--muted);
-}
-.export-btns { display: flex; gap: 0.4rem; }
+/* PNG export buttons */
 .export-btn {
-  flex: 1;
-  padding: 0.4rem 0;
+  padding: 0.22rem 0.5rem;
   font: inherit;
   font-size: var(--text-xxs);
   font-variant-numeric: tabular-nums;
   color: var(--fg);
-  background: none;
+  background: var(--bg);
   border: 1px solid var(--border-hover);
   border-radius: 5px;
   cursor: pointer;

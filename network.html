@@ -1,8 +1,714 @@
 ---
-layout: network
+layout: default
 title: Network
-heading: Publication Network
 permalink: /network/
-styles: [network.css]
-description: A live similarity network of Dario Rodighiero's publications — the worked example for the Bolzano network-design workshop.
+styles: [network.css, studio.css]
+description: Build a similarity network in your browser — drop in text files and watch them arrange by meaning. Nothing leaves your machine.
 ---
+<header class="page-head">
+  <p>Drop in a set of text files and watch them arrange into a similarity network — embedding, similarity, and layout all run live in your browser. Your files never leave this machine.</p>
+</header>
+
+<div id="network-view" class="studio-view">
+  <div class="studio-col studio-col--upload">
+    <h2 class="col-head">1 · Add data</h2>
+    <p class="lede">Each file becomes a node, placed near the files it most resembles. Drop <code>.txt</code> or <code>.md</code> files — 20–30 short ones works well.</p>
+
+    <label class="dropzone" id="dropzone">
+      <svg class="dz-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+        <path d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <span id="dropzone-label"><strong>Drop text files here</strong><span class="dz-sub">or click to choose · .txt or .md</span></span>
+      <input type="file" id="file-input" accept=".txt,.md,.markdown,text/plain" multiple>
+    </label>
+
+    <p class="dz-alt">No files handy? <button type="button" class="linkish" id="sample-btn">Load a sample set</button></p>
+
+    <div class="file-block" id="file-block" hidden>
+      <div class="file-list-head">
+        <span id="file-count">0 files</span>
+        <button type="button" class="linkish" id="clear-btn">Clear</button>
+      </div>
+      <ul class="file-list" id="file-list"></ul>
+    </div>
+  </div>
+
+  <div class="studio-col studio-col--build">
+    <h2 class="col-head">2 · Build &amp; tune</h2>
+    <button type="button" class="studio-build" id="build-btn" disabled>Build network</button>
+
+    <p class="studio-status" id="status" aria-live="polite"></p>
+
+    <div class="studio-controls" id="controls" hidden>
+      <p class="controls-head">Tuning</p>
+      <label class="studio-control switch-row">
+        <span class="switch-label">Node labels</span>
+        <input type="checkbox" id="labels-toggle" class="switch-input">
+        <span class="switch" aria-hidden="true"></span>
+      </label>
+      <label class="studio-control switch-row">
+        <span class="switch-label">Shorten titles</span>
+        <input type="checkbox" id="shorten-toggle" class="switch-input" disabled>
+        <span class="switch" aria-hidden="true"></span>
+      </label>
+      <div class="studio-control slider-row">
+        <span class="sname" title="Each node links to its single closest file, but only if their similarity clears this value. Raise it and the network fragments; lower it and everything connects.">Threshold</span>
+        <input type="range" id="threshold" min="0" max="0.95" step="0.01" value="0.70" aria-label="Connection threshold">
+        <span class="val" id="threshold-val">0.70</span>
+      </div>
+      <div class="studio-control slider-row">
+        <span class="sname" title="How hard nodes push apart. Higher spreads the whole network out; lower lets clusters pull together.">Repulsion</span>
+        <input type="range" id="charge" min="40" max="600" step="10" value="280" aria-label="Repulsion">
+        <span class="val" id="charge-val">280</span>
+      </div>
+      <div class="studio-control slider-row">
+        <span class="sname" title="Pull toward the centre. Higher gathers the whole network into a tighter ball; zero lets it drift apart and fill the space.">Gravity</span>
+        <input type="range" id="gravity" min="0" max="0.3" step="0.01" value="0.05" aria-label="Gravity">
+        <span class="val" id="gravity-val">0.05</span>
+      </div>
+      <div class="studio-control slider-row">
+        <span class="sname" title="Minimum breathing room kept around each node, so markers and labels don't overlap.">Spacing</span>
+        <input type="range" id="spacing" min="4" max="60" step="1" value="24" aria-label="Node spacing">
+        <span class="val" id="spacing-val">24</span>
+      </div>
+      <div class="studio-control slider-row">
+        <span class="sname" title="Resting length of the edges. Longer edges stretch connected files further apart.">Link distance</span>
+        <input type="range" id="linkdist" min="5" max="100" step="1" value="15" aria-label="Link distance">
+        <span class="val" id="linkdist-val">15</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="stage">
+    <p class="stage-empty" id="stage-empty">Your similarity network will appear here.<br><span>Add files or load the sample set, then build.</span></p>
+    <div class="stage-corner" id="stage-corner" hidden>
+      <div class="export-overlay">
+        <span class="export-label">Download</span>
+        <button type="button" class="export-btn" data-scale="1">1×</button>
+        <button type="button" class="export-btn" data-scale="2">2×</button>
+        <button type="button" class="export-btn" data-scale="4">4×</button>
+      </div>
+      <div class="stats-overlay" id="stats" aria-live="polite"></div>
+    </div>
+    <svg id="net" aria-label="Live similarity network"></svg>
+  </div>
+</div>
+
+<script src="{{ '/js/d3.v7.min.js' | relative_url }}"></script>
+<script type="module">
+  import { pipeline, env } from 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3';
+
+  // Fetch models from the Hugging Face hub (we don't vendor them).
+  env.allowLocalModels = false;
+
+  // Multilingual embedder: mixed-language corpora work without any translation
+  // step. Swap to 'Xenova/all-MiniLM-L6-v2' for a smaller/faster English model.
+  // e5 models expect a short instruction prefix on each input.
+  const MODEL = 'Xenova/multilingual-e5-small';
+  const PREFIX = 'query: ';
+
+  // Layout constants mirror scripts/layout-network.js so the live graph behaves
+  // like the baked one on the Network page.
+  const NODE_RADIUS = 3;
+  const NODE_SPACING = 24;
+  const CHARGE_STRENGTH = -280;
+  const DEFAULT_SIM = 0.70;
+
+  const d3 = window.d3;
+  const statusEl = document.getElementById('status');
+  const dropzone = document.getElementById('dropzone');
+  const fileInput = document.getElementById('file-input');
+  const fileListEl = document.getElementById('file-list');
+  const controlsEl = document.getElementById('controls');
+  const thresholdEl = document.getElementById('threshold');
+  const thresholdVal = document.getElementById('threshold-val');
+  const chargeEl = document.getElementById('charge');
+  const chargeVal = document.getElementById('charge-val');
+  const gravityEl = document.getElementById('gravity');
+  const gravityVal = document.getElementById('gravity-val');
+  const spacingEl = document.getElementById('spacing');
+  const spacingVal = document.getElementById('spacing-val');
+  const linkdistEl = document.getElementById('linkdist');
+  const linkdistVal = document.getElementById('linkdist-val');
+  const labelsToggle = document.getElementById('labels-toggle');
+  const shortenToggle = document.getElementById('shorten-toggle');
+  const buildBtn = document.getElementById('build-btn');
+  const sampleBtn = document.getElementById('sample-btn');
+  const clearBtn = document.getElementById('clear-btn');
+  const fileBlock = document.getElementById('file-block');
+  const fileCountEl = document.getElementById('file-count');
+  const stageEmpty = document.getElementById('stage-empty');
+  const statsEl = document.getElementById('stats');
+  const stageCorner = document.getElementById('stage-corner');
+
+  // A small built-in corpus so the page is usable without your own files. Three
+  // loose themes (felines, the cosmos, baking) so the clustering is easy to see.
+  const SAMPLE_DOCS = [
+    { name: 'house-cat', text: 'The domestic cat is a small carnivorous feline that purrs, hunts mice, and grooms its fur for hours.' },
+    { name: 'lion', text: 'Lions are large social cats of the African savanna; a pride hunts together and the males grow heavy manes.' },
+    { name: 'tiger', text: 'The tiger is the largest wild cat, a striped solitary predator that swims well and stalks deer in dense forest.' },
+    { name: 'galaxy', text: 'A galaxy is a vast gravitationally bound system of stars, gas, and dark matter spiralling through deep space.' },
+    { name: 'black-hole', text: 'A black hole is a region of spacetime where gravity is so strong that not even light can escape its event horizon.' },
+    { name: 'comet', text: 'Comets are icy bodies that grow glowing tails of gas and dust as they swing close to the Sun on long orbits.' },
+    { name: 'sourdough', text: 'Sourdough bread rises with a wild yeast starter; the dough ferments for hours and bakes into a crisp tangy crust.' },
+    { name: 'croissant', text: 'A croissant is a flaky pastry made by folding butter into laminated dough, then proofing and baking until golden.' },
+    { name: 'chocolate-cake', text: 'This chocolate cake creams butter and sugar, folds in cocoa and flour, and bakes into a moist tender crumb.' }
+  ];
+
+  function setStatus(msg, isError) {
+    statusEl.textContent = msg || '';
+    statusEl.classList.toggle('error', !!isError);
+  }
+
+  // Yield to the browser so a status update actually paints before the next
+  // (synchronous) stage runs.
+  function paint() {
+    return new Promise(function (r) { requestAnimationFrame(function () { requestAnimationFrame(r); }); });
+  }
+
+  // ── Chrono: time a build; the result shows as "built in Ns" in the stats
+  // panel over the graph (no on-screen counter while building). ──
+  let chronoStart = 0;
+  let lastBuildSecs = null;
+
+  function startChrono() {
+    chronoStart = performance.now();
+    lastBuildSecs = null;
+  }
+
+  function stopChrono(ok) {
+    if (!ok) return;
+    lastBuildSecs = ((performance.now() - chronoStart) / 1000).toFixed(1);
+    renderStats();
+  }
+
+  function hideChrono() { lastBuildSecs = null; }
+
+  // ── State ──
+  let docs = [];        // { name, text }
+  let vectors = [];     // Float32Array per doc (normalized)
+  let sim = [];         // sim[i][j]
+  let embedder = null;
+  let embedderPromise = null;
+  let busy = false;
+
+  // Start downloading/initialising the embedding model. Safe to call repeatedly:
+  // the first call kicks it off, later calls return the same promise. Staging
+  // files calls this so the (slow, ~110 MB) load overlaps with the user reviewing
+  // their files, and the "Load model" step is usually already done by build time.
+  function warmModel() {
+    if (!embedderPromise) {
+      embedderPromise = pipeline('feature-extraction', MODEL, {
+        progress_callback: function (p) {
+          if (busy && p && p.status === 'progress' && typeof p.progress === 'number') {
+            setStatus('Downloading the model (one-time, ~110 MB)… ' + Math.round(p.progress) + '%');
+          }
+        }
+      }).then(function (m) { embedder = m; return m; });
+    }
+    return embedderPromise;
+  }
+
+  // ── File reading ──
+  function readFile(file) {
+    return new Promise(function (resolve, reject) {
+      const r = new FileReader();
+      r.onload = function () {
+        const text = String(r.result || '').trim();
+        const fallback = file.name.replace(/\.[^.]+$/, '');
+        resolve({ name: titleFromText(text, fallback), text: text });
+      };
+      r.onerror = reject;
+      r.readAsText(file);
+    });
+  }
+
+  // Node name = the document's first Markdown heading (mirrors the offline
+  // pipeline, which treats the first "# " line as the title). Falls back to the
+  // filename when there's no heading.
+  function titleFromText(text, fallback) {
+    const m = text.match(/^\s{0,3}#{1,6}\s+(.+?)\s*#*\s*$/m);
+    return m ? m[1].trim() : fallback;
+  }
+
+  // Drop / pick files: read them and stage for building. Nothing is embedded
+  // until the user clicks "Build network".
+  async function stageFiles(fileList) {
+    if (busy) return;
+    const files = Array.from(fileList).filter(function (f) {
+      return /\.(txt|md|markdown)$/i.test(f.name) || f.type === 'text/plain';
+    });
+    if (!files.length) { setStatus('No .txt or .md files found in that drop.', true); return; }
+
+    // A fresh drop invalidates any previous build.
+    vectors = []; sim = [];
+    controlsEl.hidden = true;
+    buildBtn.hidden = false;
+    clearStage();
+
+    try {
+      setStatus('Reading ' + files.length + ' file' + (files.length === 1 ? '' : 's') + '…');
+      const read = await Promise.all(files.map(readFile));
+      docs = read.filter(function (d) { return d.text.length > 0; });
+      renderFileList();
+      if (docs.length < 2) {
+        setStatus('Add at least two non-empty files to build a network.', true);
+        buildBtn.disabled = true;
+        return;
+      }
+      setStatus(docs.length + ' files ready — click “Build network”.');
+      buildBtn.disabled = false;
+      warmModel(); // start the slow model load in the background now
+    } catch (err) {
+      console.error(err);
+      setStatus('Could not read those files: ' + (err && err.message ? err.message : err), true);
+    }
+  }
+
+  // Run the pipeline on the staged files, stepping the progress indicator.
+  async function buildNetwork() {
+    if (busy || docs.length < 2) return;
+    busy = true;
+    buildBtn.disabled = true;
+    buildBtn.classList.add('busy');
+    buildBtn.textContent = 'Building…';
+    stageEmpty.hidden = true;
+    startChrono();
+    let ok = false;
+    try {
+      if (!embedder) {
+        setStatus('Loading the embedding model (first time downloads ~110 MB, then cached)…');
+        await warmModel();
+      } else {
+        setStatus('Model ready.');
+        await paint();
+      }
+
+      vectors = [];
+      for (let i = 0; i < docs.length; i++) {
+        setStatus('Embedding ' + (i + 1) + ' of ' + docs.length + '…');
+        const out = await embedder(PREFIX + docs[i].text, { pooling: 'mean', normalize: true });
+        vectors.push(out.data);
+      }
+
+      setStatus('Computing similarities…');
+      await paint();
+      computeSimilarity();
+
+      setStatus('Laying out the network…');
+      await paint();
+      buildGraph();
+
+      ok = true;
+      renderStats();
+      setStatus('');
+      controlsEl.hidden = false;
+    } catch (err) {
+      console.error(err);
+      setStatus('Something went wrong: ' + (err && err.message ? err.message : err), true);
+      if (!docs.length || !sim.length) stageEmpty.hidden = false;
+    } finally {
+      stopChrono(ok);
+      busy = false;
+      buildBtn.classList.remove('busy');
+      buildBtn.textContent = 'Build network';
+      buildBtn.disabled = docs.length < 2;
+      buildBtn.hidden = ok; // nothing to rebuild until the files change
+    }
+  }
+
+  function renderFileList() {
+    fileBlock.hidden = docs.length === 0;
+    fileCountEl.textContent = docs.length + (docs.length === 1 ? ' file' : ' files');
+    fileListEl.innerHTML = docs.map(function (d) {
+      return '<li><span class="fname">' + escapeHtml(d.name) + '</span><span>' + d.text.length + ' ch</span></li>';
+    }).join('');
+  }
+
+  // Tear down any drawn graph and bring back the empty-state placeholder.
+  function clearStage() {
+    if (svg) svg.selectAll('*').remove();
+    if (simulation) { simulation.stop(); simulation = null; }
+    stageEmpty.hidden = false;
+    stageCorner.hidden = true;
+    hideChrono();
+  }
+
+  // Wipe everything back to the initial empty state.
+  function clearAll() {
+    if (busy) return;
+    docs = []; vectors = []; sim = [];
+    renderFileList();
+    controlsEl.hidden = true;
+    buildBtn.disabled = true;
+    buildBtn.hidden = false;
+    setStatus('');
+    fileInput.value = '';
+    clearStage();
+  }
+
+  // Load the built-in sample corpus and stage it for building.
+  function loadSamples() {
+    if (busy) return;
+    docs = SAMPLE_DOCS.map(function (d) { return { name: d.name, text: d.text }; });
+    vectors = []; sim = [];
+    renderFileList();
+    controlsEl.hidden = true;
+    buildBtn.hidden = false;
+    clearStage();
+    setStatus(docs.length + ' sample files ready — click “Build network”.');
+    buildBtn.disabled = false;
+    warmModel(); // start the slow model load in the background now
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+
+  function computeSimilarity() {
+    const n = vectors.length;
+    sim = Array.from({ length: n }, function () { return new Array(n).fill(0); });
+    for (let i = 0; i < n; i++) {
+      for (let j = i + 1; j < n; j++) {
+        let dot = 0;
+        const a = vectors[i], b = vectors[j];
+        for (let k = 0; k < a.length; k++) dot += a[k] * b[k];
+        sim[i][j] = sim[j][i] = dot;
+      }
+    }
+  }
+
+  // Each node links to its single strongest neighbour, if it clears the threshold.
+  function buildLinks(threshold) {
+    const n = docs.length;
+    const seen = new Set();
+    const links = [];
+    for (let i = 0; i < n; i++) {
+      let bestJ = -1, bestS = -Infinity;
+      for (let j = 0; j < n; j++) {
+        if (i === j) continue;
+        if (sim[i][j] > bestS) { bestS = sim[i][j]; bestJ = j; }
+      }
+      if (bestJ >= 0 && bestS > threshold) {
+        const key = i < bestJ ? i + ':' + bestJ : bestJ + ':' + i;
+        if (!seen.has(key)) { seen.add(key); links.push({ source: i, target: bestJ, value: bestS }); }
+      }
+    }
+    return links;
+  }
+
+  // A one-line summary of the current network at the active threshold.
+  function networkStats() {
+    const n = docs.length;
+    const links = buildLinks(+thresholdEl.value);
+    const connected = new Set();
+    links.forEach(function (l) { connected.add(l.source); connected.add(l.target); });
+    const isolated = n - connected.size;
+
+    let strongest = 0, sum = 0, count = 0;
+    for (let i = 0; i < n; i++) {
+      for (let j = i + 1; j < n; j++) {
+        const s = sim[i][j];
+        if (s > strongest) strongest = s;
+        sum += s; count++;
+      }
+    }
+    const avg = count ? sum / count : 0;
+
+    const clusters = countClusters(links, n);
+    return [
+      n + ' files',
+      links.length + (links.length === 1 ? ' edge' : ' edges'),
+      clusters + (clusters === 1 ? ' cluster' : ' clusters'),
+      isolated + ' unconnected',
+      'strongest link ' + strongest.toFixed(2),
+      'avg similarity ' + avg.toFixed(2)
+    ];
+  }
+
+  // Show the stats overlay in the top-right corner of the graph, one stat
+  // per line.
+  function renderStats() {
+    if (!sim.length) return;
+    const parts = networkStats();
+    if (lastBuildSecs != null) parts.push('built in ' + lastBuildSecs + 's');
+    statsEl.innerHTML = parts.map(function (p) { return '<span>' + escapeHtml(p) + '</span>'; }).join('');
+    stageCorner.hidden = false;
+  }
+
+  // Connected components over the current links (isolated nodes count as their
+  // own single-node cluster).
+  function countClusters(links, n) {
+    const parent = Array.from({ length: n }, function (_, i) { return i; });
+    function find(x) { while (parent[x] !== x) { parent[x] = parent[parent[x]]; x = parent[x]; } return x; }
+    links.forEach(function (l) { parent[find(l.source)] = find(l.target); });
+    const roots = new Set();
+    for (let i = 0; i < n; i++) roots.add(find(i));
+    return roots.size;
+  }
+
+  // ── Live force graph (reuses the Network page's visual classes) ──
+  let svg, nodeSel, linkSel, labelSel, simulation, nodes;
+  let labelsOn = false;
+  let shortenOn = false;
+
+  // Trim a long title to a compact label, breaking on a word boundary.
+  function shortenTitle(name) {
+    const MAX = 22;
+    if (name.length <= MAX) return name;
+    const cut = name.slice(0, MAX);
+    const sp = cut.lastIndexOf(' ');
+    return (sp > 8 ? cut.slice(0, sp) : cut).replace(/[\s—–-]+$/, '') + '…';
+  }
+  function displayName(name) { return shortenOn ? shortenTitle(name) : name; }
+
+  function stageDim() {
+    const stage = document.querySelector('#network-view .stage');
+    return { w: stage.clientWidth, h: stage.clientHeight };
+  }
+
+  // Edge resting length: the "Link distance" slider sets the floor, and weaker
+  // similarities are stretched a little further apart.
+  function linkDistance(d) {
+    return (+linkdistEl.value) + (1 - d.value) * 45;
+  }
+
+  function buildGraph() {
+    const dim = stageDim();
+    nodes = docs.map(function (d, i) { return { i: i, name: d.name }; });
+
+    svg = d3.select('#net');
+    svg.selectAll('*').remove();
+    const linkLayer = svg.append('g').attr('class', 'links');
+    const nodeLayer = svg.append('g').attr('class', 'nodes');
+    const labelLayer = svg.append('g').attr('class', 'labels');
+
+    let links = buildLinks(+thresholdEl.value);
+
+    linkSel = linkLayer.selectAll('line');
+    labelSel = labelLayer.selectAll('text').data(nodes).enter().append('text');
+
+    const nodeEnter = nodeLayer.selectAll('g.node').data(nodes).enter()
+      .append('g').attr('class', 'node draggable');
+    nodeEnter.append('circle').attr('class', 'hit').attr('r', 12);
+    nodeEnter.append('circle').attr('class', 'marker').attr('r', NODE_RADIUS);
+    nodeEnter.append('circle').attr('class', 'ring').attr('r', NODE_RADIUS + 2);
+    nodeSel = nodeEnter;
+
+    nodeSel
+      .on('mouseenter', function (e, d) { d3.select(this).classed('hover', true); setLabel(d.i, d.name); })
+      .on('mouseleave', function (e, d) { d3.select(this).classed('hover', false); setLabel(d.i, labelsOn ? displayName(d.name) : ''); })
+      .call(d3.drag()
+        .on('start', function (e, d) { if (!e.active) simulation.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; d3.select(this).classed('dragging', true); })
+        .on('drag', function (e, d) { d.fx = e.x; d.fy = e.y; })
+        .on('end', function (e, d) { if (!e.active) simulation.alphaTarget(0); d.fx = null; d.fy = null; d3.select(this).classed('dragging', false); }));
+
+    simulation = d3.forceSimulation(nodes)
+      .force('link', d3.forceLink(links).id(function (d) { return d.i; })
+        .distance(linkDistance)
+        .strength(function (d) { return 0.5 + d.value * 0.5; }))
+      .force('charge', d3.forceManyBody().strength(-(+chargeEl.value)).distanceMax(520))
+      .force('center', d3.forceCenter(dim.w / 2, dim.h / 2))
+      .force('x', d3.forceX(dim.w / 2).strength(+gravityEl.value))
+      .force('y', d3.forceY(dim.h / 2).strength(+gravityEl.value))
+      .force('collide', d3.forceCollide().radius(NODE_RADIUS + (+spacingEl.value)))
+      .on('tick', ticked);
+
+    drawLinks(links);
+    applyLabels();
+  }
+
+  // Show every node's name when the labels switch is on; otherwise leave labels
+  // to hover.
+  function applyLabels() {
+    if (!labelSel || !nodes) return;
+    nodes.forEach(function (n) { setLabel(n.i, labelsOn ? displayName(n.name) : ''); });
+  }
+
+  function drawLinks(links) {
+    linkSel = svg.select('g.links').selectAll('line').data(links, function (d) {
+      const s = d.source.i != null ? d.source.i : d.source;
+      const t = d.target.i != null ? d.target.i : d.target;
+      return s < t ? s + ':' + t : t + ':' + s;
+    });
+    linkSel.exit().remove();
+    linkSel = linkSel.enter().append('line').attr('class', 'link').merge(linkSel);
+  }
+
+  function ticked() {
+    if (linkSel) linkSel
+      .attr('x1', function (d) { return d.source.x; }).attr('y1', function (d) { return d.source.y; })
+      .attr('x2', function (d) { return d.target.x; }).attr('y2', function (d) { return d.target.y; });
+    nodeSel.attr('transform', function (d) { return 'translate(' + d.x + ',' + d.y + ')'; });
+    labelSel.attr('transform', function (d) { return 'translate(' + d.x + ',' + d.y + ')'; });
+  }
+
+  function setLabel(i, name) {
+    const el = labelSel.filter(function (d) { return d.i === i; });
+    el.selectAll('tspan').remove();
+    if (name) el.append('tspan').attr('x', 0).attr('y', -10).text(name);
+  }
+
+  const SVGNS = 'http://www.w3.org/2000/svg';
+
+  // Rasterise the current graph to a PNG at the given pixel scale and download
+  // it. The SVG is rebuilt standalone (external CSS won't apply once it's an
+  // <img>), with concrete colours/fonts inlined and a background drawn in.
+  function exportPNG(scale) {
+    if (!svg || !nodes) { setStatus('Build a network before downloading.', true); return; }
+    const dim = stageDim();
+    const w = dim.w, h = dim.h;
+    const sw = Math.round(w * scale), sh = Math.round(h * scale);
+
+    const root = getComputedStyle(document.documentElement);
+    const fg = (root.getPropertyValue('--fg') || '#000').trim();
+    const bg = (root.getPropertyValue('--bg') || '#fff').trim();
+    let fontFamily = 'sans-serif', fontSize = '11px';
+    const oneLabel = svg.select('.labels text').node();
+    if (oneLabel) {
+      const cs = getComputedStyle(oneLabel);
+      fontFamily = cs.fontFamily || fontFamily;
+      fontSize = cs.fontSize || fontSize;
+    }
+
+    // Rendering the SVG at the scaled width/height (viewBox stays at w×h) makes
+    // the browser rasterise the vector at full resolution — crisp at 2× and 4×,
+    // rather than upscaling a 1× bitmap.
+    const clone = svg.node().cloneNode(true);
+    clone.setAttribute('xmlns', SVGNS);
+    clone.setAttribute('width', sw);
+    clone.setAttribute('height', sh);
+    clone.setAttribute('viewBox', '0 0 ' + w + ' ' + h);
+    clone.querySelectorAll('.hit, .ring').forEach(function (n) { n.remove(); });
+
+    const style = document.createElementNS(SVGNS, 'style');
+    style.textContent =
+      '.marker{fill:' + bg + ';stroke:' + fg + ';stroke-width:0.5}' +
+      '.link{stroke:' + fg + ';stroke-width:0.5}' +
+      '.labels text{font-family:' + fontFamily + ';font-size:' + fontSize + ';fill:' + fg +
+      ';text-anchor:middle;paint-order:stroke;stroke:' + bg + ';stroke-width:3px;stroke-linejoin:round}';
+
+    const rect = document.createElementNS(SVGNS, 'rect');
+    rect.setAttribute('width', w);
+    rect.setAttribute('height', h);
+    rect.setAttribute('fill', bg);
+    clone.insertBefore(rect, clone.firstChild);
+    clone.insertBefore(style, clone.firstChild);
+
+    const svgStr = new XMLSerializer().serializeToString(clone);
+    const url = URL.createObjectURL(new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' }));
+    const img = new Image();
+    img.onload = function () {
+      const canvas = document.createElement('canvas');
+      canvas.width = sw;
+      canvas.height = sh;
+      canvas.getContext('2d').drawImage(img, 0, 0);
+      URL.revokeObjectURL(url);
+      canvas.toBlob(function (blob) {
+        if (!blob) { setStatus('Could not create the PNG.', true); return; }
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'similarity-network@' + scale + 'x.png';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
+      }, 'image/png');
+    };
+    img.onerror = function () { URL.revokeObjectURL(url); setStatus('Could not render the image for download.', true); };
+    img.src = url;
+  }
+
+  // Reheat the simulation so a force change takes visible effect.
+  function nudge() { if (simulation) simulation.alpha(0.6).restart(); }
+
+  // ── Threshold slider: rebuild links live ──
+  thresholdEl.addEventListener('input', function () {
+    thresholdVal.textContent = (+thresholdEl.value).toFixed(2);
+    if (!simulation) return;
+    const links = buildLinks(+thresholdEl.value);
+    simulation.force('link').links(links);
+    drawLinks(links);
+    simulation.alpha(0.6).restart();
+    renderStats();
+  });
+
+  // ── Repulsion: charge strength ──
+  chargeEl.addEventListener('input', function () {
+    chargeVal.textContent = chargeEl.value;
+    if (simulation) simulation.force('charge').strength(-(+chargeEl.value));
+    nudge();
+  });
+
+  // ── Gravity: pull toward the centre ──
+  gravityEl.addEventListener('input', function () {
+    gravityVal.textContent = (+gravityEl.value).toFixed(2);
+    if (simulation) {
+      simulation.force('x').strength(+gravityEl.value);
+      simulation.force('y').strength(+gravityEl.value);
+    }
+    nudge();
+  });
+
+  // ── Node spacing: collision radius ──
+  spacingEl.addEventListener('input', function () {
+    spacingVal.textContent = spacingEl.value;
+    if (simulation) simulation.force('collide').radius(NODE_RADIUS + (+spacingEl.value));
+    nudge();
+  });
+
+  // ── Link distance: edge resting length ──
+  linkdistEl.addEventListener('input', function () {
+    linkdistVal.textContent = linkdistEl.value;
+    if (simulation) simulation.force('link').distance(linkDistance);
+    nudge();
+  });
+
+  // ── Labels on/off (shorten is a sub-option, only meaningful with labels on) ──
+  labelsToggle.addEventListener('change', function () {
+    labelsOn = labelsToggle.checked;
+    shortenToggle.disabled = !labelsOn;
+    applyLabels();
+  });
+
+  // ── Shorten titles on/off ──
+  shortenToggle.addEventListener('change', function () {
+    shortenOn = shortenToggle.checked;
+    applyLabels();
+  });
+
+  // ── PNG export at 1× / 2× / 4× ──
+  document.querySelectorAll('.export-btn').forEach(function (b) {
+    b.addEventListener('click', function () { exportPNG(+b.dataset.scale); });
+  });
+
+  // ── Drop zone wiring ──
+  ['dragenter', 'dragover'].forEach(function (ev) {
+    dropzone.addEventListener(ev, function (e) { e.preventDefault(); dropzone.classList.add('dragover'); });
+  });
+  ['dragleave', 'drop'].forEach(function (ev) {
+    dropzone.addEventListener(ev, function (e) { e.preventDefault(); dropzone.classList.remove('dragover'); });
+  });
+  dropzone.addEventListener('drop', function (e) { stageFiles(e.dataTransfer.files); });
+  fileInput.addEventListener('change', function () { stageFiles(fileInput.files); });
+  buildBtn.addEventListener('click', buildNetwork);
+  sampleBtn.addEventListener('click', loadSamples);
+  clearBtn.addEventListener('click', clearAll);
+
+  // Keep the simulation centered on resize.
+  let resizeTimer = null;
+  window.addEventListener('resize', function () {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(function () {
+      if (!simulation) return;
+      const dim = stageDim();
+      simulation.force('center', d3.forceCenter(dim.w / 2, dim.h / 2));
+      simulation.force('x').x(dim.w / 2);
+      simulation.force('y').y(dim.h / 2);
+      simulation.alpha(0.3).restart();
+    }, 150);
+  });
+</script>
