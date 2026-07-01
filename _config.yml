@@ -9,11 +9,8 @@ url: https://rodighiero.github.io
 # that flag too.
 baseurl: ""
 
-# _publications/ holds the source abstracts for scripts/build-network.py only;
-# Jekyll never renders them (underscore-prefixed dirs are excluded from the build).
+# Files that are part of the repo but not part of the published site.
 exclude:
-  - scripts
-  - requirements.txt
   - README.md
   - Gemfile
   - Gemfile.lock
