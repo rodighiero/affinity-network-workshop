@@ -4,10 +4,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-The companion website for the **Affinity Network Workshop** (a four-day workshop on network design, Bolzano, July 6–9, 2026). It's a small Jekyll site with three pages, and everything analytical runs **client-side in the browser** — nothing is precomputed, committed, or uploaded:
+The companion website for the **Affinity Network Workshop** (a four-day workshop on network design, Bolzano, July 6–9, 2026). It's a small Jekyll site with four pages, and everything analytical runs **client-side in the browser** — nothing is precomputed, committed, or uploaded:
 
 - **Home** (`index.html`, permalink `/`) — workshop description, learning outcomes, approach, and a day-by-day schedule.
 - **Text** (`text.html`, permalink `/text/`) — the "microscope": drop in **one** document and read it in layers (measurements, vocabulary, grammar, entities, readability, sentiment, keywords, recurring phrases, and a paragraph-by-paragraph narrative arc). English only.
+- **Exercises** (`exercises.html`, permalink `/exercises/`) — a static lab of eight close-reading tasks for the Text page, used in the workshop's text-analysis session. Pure content (no JS); styled by `exercises.css`. Each task card maps to Text-page sections and pairs a *Task* with what it teaches (*Learn*); the last few point toward the Network page.
 - **Network** (`network.html`, permalink `/network/`) — the "telescope": drop in a **set** of text files and watch them arrange into a similarity network. Embedding, similarity, and force layout all run in the browser.
 
 > History: the site previously rendered a *pre-baked* publication graph computed offline in Python. That is gone, along with its `_publications/` abstracts and `scripts/`. If you find references to `_data/network.json`, a `network` layout, or "baked positions", they're stale — nothing in the current site produces or consumes them.
