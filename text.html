@@ -102,37 +102,70 @@ description: Close-read a single document — counts, readability, keywords and 
 
   <section class="analysis">
     <div class="analysis-main">
+      <h2 class="analysis-head">Sentiment</h2>
+      <figure class="fig">
+        <div class="stat-grid" id="sentiment"></div>
+        <div class="senti" id="sentiment-meter"></div>
+        <div class="ent" id="sentiment-words"></div>
+      </figure>
+    </div>
+    <aside class="analysis-aside">
+      <p class="aside-text">The emotional tone of the writing: each word is looked up in the <a href="https://github.com/fnielsen/afinn" target="_blank" rel="noopener">AFINN</a> lexicon, which rates words from −5 to +5, and the valences are summed (a preceding “not” or “never” flips the sign). Above zero leans positive, below negative. A blunt, lexicon-based estimate — it misses sarcasm and context. Assumes English.</p>
+    </aside>
+  </section>
+
+  <section class="analysis">
+    <div class="analysis-main">
       <h2 class="analysis-head">Keywords</h2>
       <figure class="fig">
-        <div class="bars" id="keywords"></div>
+        <div class="kw-cols">
+          <div class="kw-col">
+            <p class="fig-cap" tabindex="0" data-tip="The content words used most often — raw count of each term (nouns and verbs, in base form).">Most frequent</p>
+            <div class="bars" id="keywords"></div>
+          </div>
+          <div class="kw-col">
+            <p class="fig-cap" tabindex="0" data-tip="Words rare in everyday English but frequent here — each count weighted by the word's rarity in general English.">Most distinctive</p>
+            <div class="bars" id="keywords-key"></div>
+          </div>
+        </div>
+        <button type="button" class="linkish kw-toggle" id="kw-toggle" hidden>Show top 20</button>
       </figure>
     </div>
     <aside class="analysis-aside">
-      <p class="aside-text">The content words the document leans on most: compromise keeps the nouns and verbs and reduces each to its base form — so “communities” and “community”, or “maps” and “mapping”, count as one — and the terms are ranked by <a href="https://doi.org/10.1147/rd.22.0159" target="_blank" rel="noopener">frequency</a> (Luhn, 1958). Assumes English.</p>
+      <p class="aside-text">The content words the document leans on most, two ways: compromise keeps the nouns and verbs and reduces each to its base form (so “communities” and “community” count as one). One list ranks them by raw <a href="https://doi.org/10.1147/rd.22.0159" target="_blank" rel="noopener">frequency</a> (Luhn, 1958); the other by distinctiveness — how much more often a word appears here than in general English — so telling terms outrank merely common ones. Assumes English.</p>
     </aside>
   </section>
 
   <section class="analysis">
     <div class="analysis-main">
-      <h2 class="analysis-head">Key phrases</h2>
+      <h2 class="analysis-head">Recurring phrases</h2>
       <figure class="fig">
-        <ul class="phrase-list" id="keyphrases"></ul>
+        <div class="kw-cols">
+          <div class="kw-col">
+            <p class="fig-cap" tabindex="0" data-tip="Noun phrases that repeat most often; the badge is how many times each occurs (kept if at least twice). Larger text = more frequent.">Most frequent</p>
+            <ul class="phrase-list" id="keyphrases"></ul>
+          </div>
+          <div class="kw-col">
+            <p class="fig-cap" tabindex="0" data-tip="Phrases whose words co-occur far more than chance (pointwise mutual information), surfacing genuine terms over merely frequent word pairs. Larger text = more tightly bound.">Strongly bound</p>
+            <ul class="phrase-list" id="keyphrases-coll"></ul>
+          </div>
+        </div>
       </figure>
     </div>
     <aside class="analysis-aside">
-      <p class="aside-text">Recurring multi-word expressions, not just single words: compromise extracts <a href="https://en.wikipedia.org/wiki/Noun_phrase" target="_blank" rel="noopener">noun phrases</a>, which are split on stopwords into runs of two or more content words and kept when they occur at least twice. Assumes English.</p>
+      <p class="aside-text">Recurring multi-word expressions, not just single words: compromise extracts <a href="https://en.wikipedia.org/wiki/Noun_phrase" target="_blank" rel="noopener">noun phrases</a>, split on stopwords into runs of two or more content words (kept if they occur at least twice). One list ranks them by how often they repeat; the other by how tightly their words bind — co-occurring far more than chance — so true terms outrank merely frequent pairs. Assumes English.</p>
     </aside>
   </section>
 
   <section class="analysis">
     <div class="analysis-main">
-      <h2 class="analysis-head">Where terms appear</h2>
+      <h2 class="analysis-head">Paragraph by paragraph</h2>
       <figure class="fig">
-        <div class="pos-map" id="positions"></div>
+        <div class="para-table" id="paragraphs"></div>
       </figure>
     </div>
     <aside class="analysis-aside">
-      <p class="aside-text">Whether a keyword runs through the whole text or clusters in one part: the document is divided into 48 equal slices and each top keyword's slices are filled where it occurs (any inflected form counts), left being the start and right the end — a <a href="https://doi.org/10.1075/ijcl.13.4.02gri" target="_blank" rel="noopener">lexical dispersion</a> plot in the sense of Gries (2008).</p>
+      <p class="aside-text">The document's arc, read one paragraph at a time: each row tracks how long a paragraph is, how hard it is to read (<a href="https://doi.org/10.1037/h0057532" target="_blank" rel="noopener">Flesch reading-ease</a>), its emotional tone (AFINN), and its most distinctive words — so you can see pacing, difficulty and mood shift across the text. Assumes English.</p>
     </aside>
   </section>
 
@@ -140,6 +173,19 @@ description: Close-read a single document — counts, readability, keywords and 
 
 <script type="module">
   import nlp from 'https://esm.sh/compromise@14';
+  import EN_TOP from '{{ "/js/en-freq.js" | relative_url }}';
+  import AFINN from '{{ "/js/afinn.js" | relative_url }}';
+
+  // Rank of each common English word (1 = most common); used to score how
+  // distinctive a keyword is (rare in general English, frequent here).
+  const EN_RANK = (function () {
+    const m = new Map();
+    EN_TOP.split(' ').forEach(function (w, i) { m.set(w, i + 1); });
+    return m;
+  })();
+  const EN_N = EN_RANK.size;
+  // Words that flip the sign of the next sentiment-bearing word.
+  const NEGATORS = new Set(['not', 'no', 'never', 'without', 'cannot', 'nor', "n't"]);
 
   const dropzone = document.getElementById('dropzone');
   const pasteInput = document.getElementById('paste-input');
@@ -158,15 +204,23 @@ description: Close-read a single document — counts, readability, keywords and 
   const entityListEl = document.getElementById('entity-list');
   const readabilityEl = document.getElementById('readability');
   const gradeBarsEl = document.getElementById('grade-bars');
+  const sentimentEl = document.getElementById('sentiment');
+  const sentimentMeterEl = document.getElementById('sentiment-meter');
+  const sentimentWordsEl = document.getElementById('sentiment-words');
+  const paragraphsEl = document.getElementById('paragraphs');
   const easeScaleEl = document.getElementById('ease-scale');
   const keywordsEl = document.getElementById('keywords');
+  const keywordsKeyEl = document.getElementById('keywords-key');
+  const kwToggleEl = document.getElementById('kw-toggle');
   const keyphrasesEl = document.getElementById('keyphrases');
-  const positionsEl = document.getElementById('positions');
+  const keyphrasesCollEl = document.getElementById('keyphrases-coll');
   const grammarEl = document.getElementById('grammar');
   const sampleNote = document.getElementById('sample-note');
 
   // The staged document (from a dropped/chosen file or the sample).
   let docText = '';
+  // Keyword lists (up to 20 each) and how many to show (10 or 20).
+  let kwFreqRows = [], kwKeyRows = [], kwLimit = 10;
 
   // Compact English stopword set, enough for keyword work.
   const STOP = new Set(('a an the and or but if then else of to in on at by for with about ' +
@@ -347,32 +401,67 @@ In conclusion, this text presents a series of experiments that explore the poten
       { name: 'Coleman–Liau', grade: gradeCL, tip: '0.0588×(letters per 100 words) − 0.296×(sentences per 100 words) − 15.8' }
     ]);
 
+    // Sentiment: sum AFINN word valences (a preceding negator flips the sign).
+    let sScore = 0, posN = 0, negN = 0;
+    const posMap = new Map(), negMap = new Map();
+    words.forEach(function (w, i) {
+      let v = AFINN[w];
+      if (v === undefined) return;
+      const prev = words[i - 1];
+      if (prev && NEGATORS.has(prev)) v = -v;
+      sScore += v;
+      if (v > 0) { posN++; posMap.set(w, (posMap.get(w) || 0) + 1); }
+      else if (v < 0) { negN++; negMap.set(w, (negMap.get(w) || 0) + 1); }
+    });
+    const sPer100 = wordCount ? sScore / wordCount * 100 : 0;
+    const sLabel = sPer100 > 0.5 ? 'Positive' : (sPer100 < -0.5 ? 'Negative' : 'Neutral');
+    renderStats(sentimentEl, [
+      [sLabel, 'overall tone'],
+      [(sPer100 >= 0 ? '+' : '') + sPer100.toFixed(1), 'net score / 100 words'],
+      [posN.toLocaleString(), 'positive words'],
+      [negN.toLocaleString(), 'negative words']
+    ]);
+    renderSentiment(sentimentMeterEl, sPer100);
+    const sentiItems = function (m) {
+      return [...m.entries()].map(function (e) { return { text: e[0], n: e[1] }; }).sort(function (a, b) { return b.n - a.n; });
+    };
+    renderEntities(sentimentWordsEl, [
+      { label: 'Positive words', items: sentiItems(posMap) },
+      { label: 'Negative words', items: sentiItems(negMap) }
+    ], 'No sentiment-bearing words found.');
+
     const lemma = buildLemmatizer(doc);
-    const kw = keywordCounts(doc, lemma).slice(0, 15);
-    const maxKw = kw.length ? kw[0][1] : 1;
-    keywordsEl.innerHTML = kw.map(function (e) {
-      const pct = Math.round(e[1] / maxKw * 100);
-      return '<div class="bar-row"><span class="bar-label">' + escapeHtml(e[0]) + '</span>' +
-        '<span class="bar-track"><span class="bar-fill" style="width:' + pct + '%"></span></span>' +
-        '<span class="bar-count">' + e[1] + '</span></div>';
-    }).join('') || '<p class="analysis-note">No salient keywords found.</p>';
+    const allKw = keywordCounts(doc, lemma);
+    // Most frequent (bar = count) and most distinctive (bar = count × general-English
+    // rank, i.e. Zipf-expected freq ∝ 1/rank, so words rare in English but frequent
+    // here rise; badge = count). Both keep up to 20; the toggle shows 10 or 20.
+    kwFreqRows = allKw.slice(0, 20).map(function (e) { return [e[0], e[1], e[1]]; });
+    kwKeyRows = allKw.filter(function (e) { return e[1] >= 2; }).map(function (e) {
+      const rank = EN_RANK.get(e[0]) || EN_N;
+      return [e[0], e[1] * rank, e[1]];
+    }).sort(function (a, b) { return b[1] - a[1]; }).slice(0, 20);
+    kwLimit = 10;
+    renderKeywordLists();
 
-    const kp = keyphraseCounts(doc, lemma).slice(0, 15);
-    keyphrasesEl.innerHTML = kp.map(function (e) {
-      return '<li><span class="phrase">' + escapeHtml(e[0]) + '</span><span class="phrase-count">' + e[1] + '×</span></li>';
-    }).join('') || '<li class="analysis-note">No repeated multi-word phrases.</li>';
-
-    // Match dispersion against the same lemmatised forms the keywords use.
+    // Lemmatised token stream, shared by phrase collocation and dispersion.
     const lemmaStream = lemmatizedTerms(doc, lemma);
-    const bins = 48;
-    const topTerms = kw.slice(0, 6);
-    positionsEl.innerHTML = topTerms.map(function (e) {
-      const cells = termPositions(lemmaStream, e[0], bins).map(function (hit) {
-        return '<span class="pos-cell' + (hit ? ' on' : '') + '"></span>';
-      }).join('');
-      return '<div class="pos-row"><span class="pos-label">' + escapeHtml(e[0]) + '</span>' +
-        '<span class="pos-strip">' + cells + '</span></div>';
-    }).join('') || '<p class="analysis-note">Not enough keywords to map.</p>';
+    const lemmaFreq = wordFreq(lemmaStream);
+    const streamN = lemmaStream.length || 1;
+    const kp = keyphraseCounts(doc, lemma);
+    // Most frequent: by repetition count.
+    renderPhrasePills(keyphrasesEl, kp.slice(0, 15).map(function (e) { return [e[0], e[1], e[1]]; }), 'No repeated multi-word phrases.');
+    // Strongly bound: PMI-style — how much more the words co-occur than chance,
+    // = log P(phrase) − Σ log P(word). Surfaces tight terms over frequent pairs.
+    const kpColl = kp.map(function (e) {
+      const parts = e[0].split(' ');
+      let sumLogWord = 0;
+      parts.forEach(function (w) { sumLogWord += Math.log(lemmaFreq.get(w) || 1); });
+      const score = Math.log(e[1]) + (parts.length - 1) * Math.log(streamN) - sumLogWord;
+      return [e[0], score, e[1]];
+    }).sort(function (a, b) { return b[1] - a[1]; }).slice(0, 15);
+    renderPhrasePills(keyphrasesCollEl, kpColl, 'No strongly-bound phrases.');
+
+    renderParagraphs(paragraphsEl, paragraphs.map(paragraphRow));
 
     resultsEl.hidden = false;
     sampleNote.hidden = true;
@@ -434,14 +523,6 @@ In conclusion, this text presents a series of experiments that explore the poten
   function lemmatizedTerms(doc, lemma) {
     return doc.terms().out('array').map(lemma);
   }
-  function termPositions(words, term, bins) {
-    const arr = new Array(bins).fill(false);
-    const n = words.length;
-    words.forEach(function (w, idx) {
-      if (w === term) arr[Math.min(bins - 1, Math.floor(idx / n * bins))] = true;
-    });
-    return arr;
-  }
   // Short, plain-language definitions shown on hover — a teaching aid.
   const STAT_DESC = {
     'words': 'Total running words (tokens) in the document.',
@@ -467,8 +548,40 @@ In conclusion, this text presents a series of experiments that explore the poten
     'Flesch reading ease': '0–100 readability score; higher is easier to read.',
     'syllables / word': 'Average syllables per word; more syllables = harder.',
     'complex words': 'Share of words with three or more syllables — the “hard words” in fog and SMOG.',
-    'long words': 'Share of words longer than six letters.'
+    'long words': 'Share of words longer than six letters.',
+    'overall tone': 'Positive, negative or neutral, from the summed word valences (AFINN lexicon).',
+    'net score / 100 words': 'Sum of word valences per 100 words; above 0 is positive, below 0 negative.',
+    'positive words': 'Count of words with a positive valence (after negation).',
+    'negative words': 'Count of words with a negative valence (after negation).'
   };
+  // Horizontal bars from rows of [label, sortValue, badge]; bar length ∝ sortValue.
+  function renderBars(container, rows, empty) {
+    const max = rows.length ? rows[0][1] : 1;
+    container.innerHTML = rows.map(function (e) {
+      const pct = Math.round(e[1] / max * 100);
+      return '<div class="bar-row"><span class="bar-label">' + escapeHtml(e[0]) + '</span>' +
+        '<span class="bar-track"><span class="bar-fill" style="width:' + pct + '%"></span></span>' +
+        '<span class="bar-count">' + e[2] + '</span></div>';
+    }).join('') || '<p class="analysis-note">' + empty + '</p>';
+  }
+  // Phrase pills sized by their metric (rows of [phrase, weight, badgeCount]).
+  function renderPhrasePills(container, rows, empty) {
+    if (!rows.length) { container.innerHTML = '<li class="analysis-note">' + empty + '</li>'; return; }
+    const vals = rows.map(function (r) { return r[1]; });
+    const lo = Math.min.apply(null, vals), span = Math.max.apply(null, vals) - lo || 1;
+    container.innerHTML = rows.map(function (e) {
+      const size = (0.72 + (e[1] - lo) / span * 0.5).toFixed(2);
+      return '<li style="font-size:' + size + 'rem"><span class="phrase">' + escapeHtml(e[0]) +
+        '</span><span class="phrase-count">' + e[2] + '×</span></li>';
+    }).join('');
+  }
+  // Draw both keyword lists at the current limit and sync the toggle button.
+  function renderKeywordLists() {
+    renderBars(keywordsEl, kwFreqRows.slice(0, kwLimit), 'No salient keywords found.');
+    renderBars(keywordsKeyEl, kwKeyRows.slice(0, kwLimit), 'No distinctive keywords found.');
+    kwToggleEl.hidden = kwFreqRows.length <= 10 && kwKeyRows.length <= 10;
+    kwToggleEl.textContent = kwLimit >= 20 ? 'Show top 10' : 'Show top 20';
+  }
   function renderStats(container, pairs) {
     container.innerHTML = pairs.map(function (p) {
       const desc = STAT_DESC[p[1]];
@@ -492,7 +605,7 @@ In conclusion, this text presents a series of experiments that explore the poten
     return [...m.values()].sort(function (a, b) { return b.n - a.n; });
   }
   // Chip lists of named entities, grouped by type; caps long lists.
-  function renderEntities(container, groups) {
+  function renderEntities(container, groups, empty) {
     const cap = 24;
     const html = groups.filter(function (g) { return g.items.length; }).map(function (g) {
       const chips = g.items.slice(0, cap).map(function (e) {
@@ -503,7 +616,66 @@ In conclusion, this text presents a series of experiments that explore the poten
       return '<div class="ent-group"><p class="fig-cap">' + escapeHtml(g.label) + '</p>' +
         '<ul class="ent-list">' + chips + more + '</ul></div>';
     }).join('');
-    container.innerHTML = html || '<p class="analysis-note">No named entities found.</p>';
+    container.innerHTML = html || '<p class="analysis-note">' + (empty || 'No named entities found.') + '</p>';
+  }
+  // Per-paragraph metrics for the narrative arc (regex tokens + AFINN + keyness; no compromise).
+  function paragraphRow(para) {
+    const w = tokenizeWords(para);
+    const words = w.length || 1;
+    const sents = (para.match(/[^.!?]+[.!?]+|[^.!?]+$/g) || []).length || 1;
+    const syll = w.reduce(function (s, x) { return s + countSyllables(x); }, 0);
+    const ease = 206.835 - 1.015 * (words / sents) - 84.6 * (syll / words);
+    let sc = 0;
+    w.forEach(function (x, i) {
+      let v = AFINN[x];
+      if (v === undefined) return;
+      if (NEGATORS.has(w[i - 1])) v = -v;
+      sc += v;
+    });
+    const f = new Map();
+    w.forEach(function (x) { if (x.length < 3 || STOP.has(x) || /^\d+$/.test(x)) return; f.set(x, (f.get(x) || 0) + 1); });
+    const terms = [...f.entries()].map(function (e) { return [e[0], e[1] * (EN_RANK.get(e[0]) || EN_N)]; })
+      .sort(function (a, b) { return b[1] - a[1]; }).slice(0, 3).map(function (e) { return e[0]; });
+    return { words: words, ease: ease, senti: sc / words * 100, terms: terms };
+  }
+  // Compact table: one row per paragraph, with sparkbars for the arc.
+  function renderParagraphs(container, rows) {
+    if (!rows.length) { container.innerHTML = '<p class="analysis-note">No paragraphs to show.</p>'; return; }
+    const maxW = Math.max.apply(null, rows.map(function (r) { return r.words; })) || 1;
+    const maxS = Math.max.apply(null, rows.map(function (r) { return Math.abs(r.senti); })) || 1;
+    const head =
+      '<div class="para-h">#</div>' +
+      '<div class="para-h" tabindex="0" data-tip="Words in the paragraph — its length and the text’s pacing.">words</div>' +
+      '<div class="para-h" tabindex="0" data-tip="Flesch reading ease (0–100); higher is easier. Shows difficulty across the text.">reading ease</div>' +
+      '<div class="para-h" tabindex="0" data-tip="AFINN net sentiment per 100 words; left of centre negative, right positive.">sentiment</div>' +
+      '<div class="para-h" tabindex="0" data-tip="The paragraph’s three most distinctive content words (rare in general English, frequent here).">key terms</div>';
+    // Reading ease can go below 0 (Flesch has no floor); a diverging bar around a
+    // 0 mark on a −40…100 scale shows it, filling left of zero when negative.
+    const eMin = -40, eSpan = 140, eZero = -eMin / eSpan * 100;
+    const body = rows.map(function (r, i) {
+      const wPct = Math.round(r.words / maxW * 100);
+      const eVal = (Math.max(eMin, Math.min(100, r.ease)) - eMin) / eSpan * 100;
+      const eStyle = 'left:' + Math.min(eZero, eVal) + '%;width:' + Math.abs(eVal - eZero) + '%';
+      const half = Math.min(50, Math.abs(r.senti) / maxS * 50);
+      const sStyle = r.senti >= 0 ? 'left:50%;width:' + half + '%' : 'left:' + (50 - half) + '%;width:' + half + '%';
+      return '<div class="para-n">' + (i + 1) + '</div>' +
+        '<div class="para-c"><span class="para-val">' + r.words + '</span><span class="spark"><span class="spark-fill" style="width:' + wPct + '%"></span></span></div>' +
+        '<div class="para-c"><span class="para-val">' + Math.round(r.ease) + '</span><span class="para-senti" style="--zero:' + eZero + '%"><span class="para-senti-fill" style="' + eStyle + '"></span></span></div>' +
+        '<div class="para-c"><span class="para-val">' + (r.senti >= 0 ? '+' : '') + r.senti.toFixed(1) + '</span><span class="para-senti"><span class="para-senti-fill" style="' + sStyle + '"></span></span></div>' +
+        '<div class="para-term">' + escapeHtml(r.terms.join(' · ') || '—') + '</div>';
+    }).join('');
+    container.innerHTML = head + body;
+  }
+  // Sentiment meter: a pointer on a Negative–Neutral–Positive track.
+  function renderSentiment(container, per100) {
+    const pos = Math.max(2, Math.min(98, 50 + per100 * 4.8));
+    container.innerHTML = '<p class="fig-cap">Sentiment scale</p>' +
+      '<div class="senti-scale">' +
+        '<div class="senti-pointer" style="left:' + pos + '%"><span class="senti-value">' +
+          (per100 >= 0 ? '+' : '') + per100.toFixed(1) + '</span></div>' +
+        '<div class="senti-bar"></div>' +
+        '<div class="senti-ends"><span>Negative</span><span>Neutral</span><span>Positive</span></div>' +
+      '</div>';
   }
   // Histogram of words-per-sentence, in 5-word buckets up to 40, then 41+.
   function renderSentHist(container, lengths) {
@@ -647,6 +819,10 @@ In conclusion, this text presents a series of experiments that explore the poten
   });
 
   analyzeBtn.addEventListener('click', analyze);
+  kwToggleEl.addEventListener('click', function () {
+    kwLimit = kwLimit >= 20 ? 10 : 20;
+    renderKeywordLists();
+  });
   sampleBtn.addEventListener('click', loadSample);
   clearBtn.addEventListener('click', function () {
     docText = ''; pasteInput.value = ''; resultsEl.hidden = true; sampleNote.hidden = true; setStatus(''); fileInput.value = '';

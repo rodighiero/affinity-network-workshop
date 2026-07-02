@@ -168,11 +168,11 @@
   margin-bottom: 0.4rem;
   z-index: 5;
   width: max-content;
-  max-width: 15rem;
-  padding: 0.4rem 0.55rem;
+  max-width: 18rem;
+  padding: 0.5rem 0.7rem;
   background: var(--fg);
   color: var(--bg);
-  font-size: var(--text-xxs);
+  font-size: var(--text-xs);
   line-height: var(--lh-normal);
   text-transform: none;
   letter-spacing: 0;
@@ -217,6 +217,64 @@
   color: var(--muted);
   font-variant-numeric: tabular-nums;
 }
+
+/* Paragraph-by-paragraph narrative table */
+.para-table {
+  display: grid;
+  grid-template-columns: 1.6rem repeat(3, minmax(3.5rem, 1fr)) minmax(6rem, 1.4fr);
+  gap: 0.55rem 0.9rem;
+  align-items: center;
+  font-size: var(--text-xs);
+}
+.para-h {
+  font-size: var(--text-xxs);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-caps);
+  color: var(--muted);
+  padding-bottom: 0.3rem;
+  border-bottom: 1px solid var(--border);
+}
+.para-n { color: var(--muted); font-variant-numeric: tabular-nums; }
+.para-c { display: flex; flex-direction: column; gap: 0.25rem; min-width: 0; }
+.para-val { font-variant-numeric: tabular-nums; }
+.spark { height: 3px; background: var(--border); border-radius: 2px; overflow: hidden; }
+.spark-fill { display: block; height: 100%; background: var(--fg); }
+.para-senti { position: relative; height: 3px; background: var(--border); border-radius: 2px; }
+.para-senti::before { content: ""; position: absolute; left: var(--zero, 50%); top: -2px; bottom: -2px; width: 1px; background: var(--muted); }
+.para-senti-fill { position: absolute; top: 0; height: 100%; background: var(--fg); border-radius: 2px; }
+.para-term { min-width: 0; line-height: var(--lh-tight); }
+
+/* Sentiment meter (Sentiment) */
+.senti { margin-top: 1.2rem; }
+.senti-scale { position: relative; padding-top: 1.5rem; }
+.senti-pointer {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  font-size: var(--text-xxs);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--fg);
+  white-space: nowrap;
+}
+.senti-pointer::after { content: "▾"; display: block; text-align: center; line-height: 0.55; }
+.senti-bar {
+  position: relative;
+  height: 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: linear-gradient(to right, var(--border), var(--bg) 50%, var(--fg));
+}
+.senti-bar::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: -3px;
+  bottom: -3px;
+  width: 1px;
+  background: var(--border);
+}
+.senti-ends { display: flex; justify-content: space-between; margin-top: 0.4rem; font-size: var(--text-xxs); color: var(--muted); }
 
 /* Named-entity chip lists (Entities) */
 .ent { margin-top: 1.2rem; display: flex; flex-direction: column; gap: 1rem; }
@@ -279,7 +337,15 @@
 }
 .fig-note { margin: 0.5rem 0 0; font-size: var(--text-xxs); color: var(--muted); }
 
-/* Keyword bars */
+/* Keyword bars — frequent vs distinctive, side by side */
+.kw-cols { display: flex; gap: 2rem; }
+.kw-col { flex: 1; min-width: 0; }
+.kw-col .fig-cap { margin-bottom: 0.6rem; }
+.kw-cols .bar-label { width: 6rem; }
+@media (max-width: 640px) { .kw-cols { flex-direction: column; gap: 1.2rem; } }
+.kw-toggle { margin-top: 0.9rem; font-size: var(--text-xxs); }
+.kw-toggle[hidden] { display: none; }
+
 .bars { display: flex; flex-direction: column; gap: 0.35rem; }
 .bar-row { display: flex; align-items: center; gap: 0.7rem; font-size: var(--text-xs); }
 .bar-label { flex: none; width: 8rem; text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -299,14 +365,6 @@
   font-size: var(--text-xs);
 }
 .phrase-count { color: var(--muted); font-size: var(--text-xxs); font-variant-numeric: tabular-nums; }
-
-/* Position map */
-.pos-map { display: flex; flex-direction: column; gap: 0.4rem; }
-.pos-row { display: flex; align-items: center; gap: 0.7rem; }
-.pos-label { flex: none; width: 8rem; text-align: right; font-size: var(--text-xs); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.pos-strip { flex: 1; display: flex; gap: 1px; height: 0.8rem; }
-.pos-cell { flex: 1; background: var(--border); border-radius: 1px; }
-.pos-cell.on { background: var(--fg); }
 
 /* Narrow screens: process notes stack under their section instead of a 4th column */
 @media (max-width: 820px) {
