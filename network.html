@@ -52,6 +52,35 @@ description: Build a similarity network in your browser — drop in text files a
         <input type="checkbox" id="shorten-toggle" class="switch-input" disabled>
         <span class="switch" aria-hidden="true"></span>
       </label>
+      <label class="studio-control switch-row">
+        <span class="switch-label" title="Draw density contours behind the graph, so clusters of similar files rise like high ground on a topographic map.">Elevation map</span>
+        <input type="checkbox" id="elevation-toggle" class="switch-input">
+        <span class="switch" aria-hidden="true"></span>
+      </label>
+      <div class="control-sub" id="elevation-sub" hidden>
+        <div class="studio-control slider-row">
+          <span class="sname" title="How much the density is blurred before contours are drawn. Higher makes broad smooth hills; lower hugs the individual nodes into tighter, noisier lines.">Smoothing</span>
+          <input type="range" id="elev-bandwidth" min="8" max="60" step="1" value="30" aria-label="Elevation smoothing">
+          <span class="val" id="elev-bandwidth-val">30</span>
+        </div>
+        <div class="studio-control slider-row">
+          <span class="sname" title="How many contour lines to draw between the lowest and highest density. More lines pack the slopes with detail; fewer show only the main peaks.">Levels</span>
+          <input type="range" id="elev-levels" min="4" max="30" step="1" value="14" aria-label="Elevation levels">
+          <span class="val" id="elev-levels-val">14</span>
+        </div>
+      </div>
+      <label class="studio-control switch-row">
+        <span class="switch-label" title="Label each link with the words its two files most share — their common vocabulary, in the sense of the paper's keyword ‘potential affinities’.">Edge keywords</span>
+        <input type="checkbox" id="edgekw-toggle" class="switch-input">
+        <span class="switch" aria-hidden="true"></span>
+      </label>
+      <div class="control-sub" id="edgekw-sub" hidden>
+        <div class="studio-control slider-row">
+          <span class="sname" title="How many shared words to show on each link. Fewer keeps it legible; more reveals the fuller common vocabulary.">Keywords</span>
+          <input type="range" id="edgekw-count" min="1" max="6" step="1" value="3" aria-label="Number of edge keywords">
+          <span class="val" id="edgekw-count-val">3</span>
+        </div>
+      </div>
       <div class="studio-control slider-row">
         <span class="sname" title="Each node links to its single closest file, but only if their similarity clears this value. Raise it and the network fragments; lower it and everything connects.">Threshold</span>
         <input type="range" id="threshold" min="0" max="0.95" step="0.01" value="0.70" aria-label="Connection threshold">
@@ -132,6 +161,16 @@ description: Build a similarity network in your browser — drop in text files a
   const linkdistVal = document.getElementById('linkdist-val');
   const labelsToggle = document.getElementById('labels-toggle');
   const shortenToggle = document.getElementById('shorten-toggle');
+  const elevationToggle = document.getElementById('elevation-toggle');
+  const elevationSub = document.getElementById('elevation-sub');
+  const elevBandwidthEl = document.getElementById('elev-bandwidth');
+  const elevBandwidthVal = document.getElementById('elev-bandwidth-val');
+  const elevLevelsEl = document.getElementById('elev-levels');
+  const elevLevelsVal = document.getElementById('elev-levels-val');
+  const edgeKwToggle = document.getElementById('edgekw-toggle');
+  const edgeKwSub = document.getElementById('edgekw-sub');
+  const edgeKwCountEl = document.getElementById('edgekw-count');
+  const edgeKwCountVal = document.getElementById('edgekw-count-val');
   const buildBtn = document.getElementById('build-btn');
   const sampleBtn = document.getElementById('sample-btn');
   const clearBtn = document.getElementById('clear-btn');
@@ -141,18 +180,42 @@ description: Build a similarity network in your browser — drop in text files a
   const statsEl = document.getElementById('stats');
   const stageCorner = document.getElementById('stage-corner');
 
-  // A small built-in corpus so the page is usable without your own files. Three
-  // loose themes (felines, the cosmos, baking) so the clustering is easy to see.
+  // A small built-in corpus so the page is usable without your own files. All
+  // animals, in five loose themes (big cats, ocean animals, birds, insects,
+  // reptiles & amphibians), six documents each, so the clustering is easy to
+  // see. A short paragraph each — long enough for the keyword and edge-keyword
+  // extraction to find real shared vocabulary within a theme.
   const SAMPLE_DOCS = [
-    { name: 'house-cat', text: 'The domestic cat is a small carnivorous feline that purrs, hunts mice, and grooms its fur for hours.' },
-    { name: 'lion', text: 'Lions are large social cats of the African savanna; a pride hunts together and the males grow heavy manes.' },
-    { name: 'tiger', text: 'The tiger is the largest wild cat, a striped solitary predator that swims well and stalks deer in dense forest.' },
-    { name: 'galaxy', text: 'A galaxy is a vast gravitationally bound system of stars, gas, and dark matter spiralling through deep space.' },
-    { name: 'black-hole', text: 'A black hole is a region of spacetime where gravity is so strong that not even light can escape its event horizon.' },
-    { name: 'comet', text: 'Comets are icy bodies that grow glowing tails of gas and dust as they swing close to the Sun on long orbits.' },
-    { name: 'sourdough', text: 'Sourdough bread rises with a wild yeast starter; the dough ferments for hours and bakes into a crisp tangy crust.' },
-    { name: 'croissant', text: 'A croissant is a flaky pastry made by folding butter into laminated dough, then proofing and baking until golden.' },
-    { name: 'chocolate-cake', text: 'This chocolate cake creams butter and sugar, folds in cocoa and flour, and bakes into a moist tender crumb.' }
+    { name: 'house-cat', text: 'The domestic cat is a small carnivorous feline kept as a companion in homes around the world. It purrs when content, hunts mice and birds with patient stalking, and grooms its soft fur for hours each day. Cats sleep through much of the day, see well in dim light, and communicate through meows, body posture, and the flick of a tail. Though tame, the cat keeps the sharp instincts of a solitary predator.' },
+    { name: 'lion', text: 'The lion is a large social cat of the African savanna, the only feline that lives in cooperative groups called prides. Females do most of the hunting, working together to bring down zebra and other grazing prey, while the heavier males grow thick manes and defend the territory. A lion’s roar carries for miles across the grassland and warns rivals to keep away. Cubs are raised communally within the pride.' },
+    { name: 'tiger', text: 'The tiger is the largest of all wild cats, a powerful striped predator that lives alone in the forests of Asia. Its orange coat and dark stripes break up its outline as it stalks deer and wild boar through dense undergrowth. Unlike most cats the tiger swims readily and often cools off in rivers and pools. Each tiger patrols a wide territory and hunts by ambush, relying on a sudden explosive rush.' },
+    { name: 'leopard', text: 'The leopard is a solitary spotted cat that ranges from African savanna to Asian forest, thriving in a wider variety of habitats than any other big cat. It is famous for hauling heavy kills high into trees, keeping the meat safe from lions and hyenas. Rosette markings camouflage the leopard as it stalks antelope, monkeys, and smaller prey. Secretive and mostly nocturnal, it is rarely seen even where it is common.' },
+    { name: 'cheetah', text: 'The cheetah is the fastest land animal, a slender spotted cat built entirely for speed across open grassland. In a short sprint it can reach seventy miles an hour, using a flexible spine, long legs, and a rudder-like tail to run down gazelle and other swift prey. Unlike other big cats it cannot roar, and it hunts by day to avoid stronger predators. After a chase it must rest before it can eat, panting hard to cool its overheated body.' },
+    { name: 'lynx', text: 'The lynx is a medium-sized wild cat of the cold northern forest, known for its tufted ears, short tail, and thick spotted coat. Broad furred paws act like snowshoes, letting it move quietly over deep snow as it hunts hares and small deer. Sharp hearing and keen night vision make it an effective ambush predator through the long winter. The lynx is shy and solitary, keeping to remote woodland far from people.' },
+    { name: 'whale', text: 'Whales are enormous ocean mammals that surface to breathe air through a blowhole before diving back into the deep. The largest baleen whales filter huge mouthfuls of tiny krill and small fish through comb-like plates, while toothed whales hunt squid and fish. They communicate across vast distances with low songs and calls that travel far through the water. Whales migrate thousands of miles between feeding and breeding grounds each year.' },
+    { name: 'octopus', text: 'The octopus is a soft-bodied mollusc with eight arms lined with sensitive suckers and a large, remarkably clever brain. It hunts crabs and fish along the seabed, changing colour and texture in an instant to hide against rock or coral. With no bones it can squeeze its whole body through the narrowest gap and slip away from predators in a cloud of ink. Curious and quick to learn, the octopus can solve puzzles and open latched containers.' },
+    { name: 'shark', text: 'Sharks are cartilaginous fish and ancient ocean predators that have patrolled the seas for hundreds of millions of years. Rows of replaceable teeth and a powerful streamlined body make them formidable hunters of fish, seals, and other prey. Special sensors detect the faint electric fields of hidden animals, and a keen sense of smell guides them toward food from far away. Most sharks must keep swimming to push water over their gills and breathe.' },
+    { name: 'dolphin', text: 'The dolphin is a sleek, highly social sea mammal that lives and hunts in groups called pods. It finds fish and squid by echolocation, sending out clicks and listening for the echoes that bounce back through the water. Dolphins leap clear of the waves, ride the bow of boats, and cooperate to herd schools of fish. They breathe air through a blowhole and are known for their playful, intelligent behaviour.' },
+    { name: 'jellyfish', text: 'A jellyfish is a soft, drifting sea creature with a pulsing, translucent bell and long trailing tentacles. It has no brain, bones, or heart, yet its stinging tentacles can catch small fish and plankton as it floats on the currents. By gently contracting its bell it pushes itself through the water, though it mostly goes wherever the tide carries it. Some jellyfish glow with their own light in the dark ocean depths.' },
+    { name: 'sea-turtle', text: 'A sea turtle is a large marine reptile that glides through warm oceans on flipper-like limbs, surfacing now and then to breathe. It spends almost its whole life at sea, feeding on jellyfish, sponges, and seagrass in coastal and open water. After decades adrift, females return to the very beach where they hatched to bury their eggs in the sand. The tiny hatchlings dig their way out and scramble to the waves under cover of night.' },
+    { name: 'eagle', text: 'The eagle is a powerful bird of prey with broad wings, a hooked beak, and extraordinarily sharp eyesight. Soaring high on rising air, it can spot a fish or a hare far below and dive to seize it in strong talons. Eagles build huge nests on cliffs and tall trees, returning to the same site year after year to raise their young. As a top predator of the skies it commands a wide hunting territory.' },
+    { name: 'penguin', text: 'Penguins are flightless seabirds of the cold southern oceans, waddling awkwardly on land but swimming with astonishing grace. Their stiff wings work like flippers to shoot through the water as they chase fish, squid, and krill. A dense coat of feathers and a thick layer of fat keep them warm in freezing seas and on the ice. Many species huddle together in large colonies to breed and share warmth.' },
+    { name: 'owl', text: 'The owl is a silent night hunter with large forward-facing eyes and a broad, disc-shaped face that funnels sound to its ears. Soft-edged feathers let it fly almost without noise, swooping down on mice and voles in near-total darkness. It can turn its head far around to scan for prey without moving its body. By day most owls roost quietly, well camouflaged against the bark of a tree.' },
+    { name: 'hummingbird', text: 'The hummingbird is a tiny, jewel-bright bird that hovers in place on wings that beat dozens of times a second. It sips sugary nectar from flowers with a long slender bill and darting tongue, and snaps up small insects for protein. Its heart races and its wings hum as it flies forward, backward, and even upside down. To survive the cold night it can slow its body almost to a standstill.' },
+    { name: 'ostrich', text: 'The ostrich is the largest and heaviest living bird, far too big to fly but built to run across the African plains. On two long, powerful legs it can sprint faster than any other bird and deliver a dangerous kick to defend itself. Large eyes and a tall neck help it watch for lions and other predators over the open savanna. It lays the biggest eggs of any bird and feeds on seeds, plants, and insects.' },
+    { name: 'parrot', text: 'Parrots are bright tropical birds with strong hooked bills and clever, curious minds. They use their beaks and clawed feet to climb through the canopy and crack open hard seeds and nuts. Many parrots live in noisy flocks and can mimic whistles, calls, and even human words. Highly social and long-lived, they form close bonds with their mates and companions.' },
+    { name: 'honeybee', text: 'The honeybee is a social insect that lives in a hive of thousands, working together to gather food and raise its young. Foragers visit flower after flower, collecting nectar and pollen and carrying them back to the colony, pollinating crops and wild plants along the way. Inside the hive the nectar is turned into honey and stored in wax combs to feed the bees through winter. A returning forager dances to tell the others where the best flowers are.' },
+    { name: 'ant', text: 'Ants are social insects that live in large colonies, marching in trails and cooperating so closely that the whole nest works almost like a single body. Different workers forage for food, dig tunnels, tend the young, and defend the nest, all serving one egg-laying queen. They communicate through scent trails and touch, passing food from one mouth to another. Together, small ants can carry loads many times their own weight.' },
+    { name: 'butterfly', text: 'A butterfly begins life as a crawling caterpillar that eats leaves almost constantly as it grows. It then seals itself inside a chrysalis, where its body is completely rebuilt into a winged adult. The emerging butterfly unfolds broad, brightly patterned wings and sips nectar from flowers through a coiled tongue, pollinating them as it feeds. Its colours can dazzle a mate or warn hungry birds that it tastes foul.' },
+    { name: 'dragonfly', text: 'The dragonfly is a swift hunting insect with four long, glassy wings and enormous compound eyes that see in almost every direction. Darting and hovering over ponds and streams, it snatches midges, mosquitoes, and other small insects out of the air. Its young, called nymphs, live underwater for months before climbing out to transform into flying adults. Few insects are faster or more agile in flight.' },
+    { name: 'grasshopper', text: 'The grasshopper is a leaping insect of grassy fields and meadows, with powerful hind legs that let it spring far to escape danger. It feeds on grass and leaves, chewing steadily through the summer, and many species chirp by rubbing a leg against a wing. Large eyes and quick reflexes help it dodge birds and other predators. In some seasons certain grasshoppers gather into vast swarms called locusts.' },
+    { name: 'ladybug', text: 'The ladybug is a small, round beetle with a domed back marked by bright, spotted wing cases. Gardeners welcome it because both the adult and its larva devour aphids and other pests that damage plants. Its cheerful colours warn birds that it tastes bitter, and it can play dead to avoid being eaten. When it flies, the hard outer wings lift to free the delicate wings folded beneath.' },
+    { name: 'crocodile', text: 'The crocodile is a large armoured reptile that lurks in rivers, lakes, and coastal swamps, waiting with only its eyes and nostrils above the water. When prey comes to drink it lunges with astonishing speed, seizing the animal in powerful jaws lined with sharp teeth. A tough hide of bony plates protects its body as it basks in the sun to warm up. Crocodiles are ancient predators that have changed little in millions of years.' },
+    { name: 'python', text: 'A python is a large, non-venomous snake that kills by constriction rather than by a poisonous bite. It coils tightly around its prey and squeezes until the animal can no longer breathe, then swallows it whole, its jaws stretching wide. Heat-sensing pits along its lips help it find warm-blooded prey in the dark. After a large meal a python can go for weeks or months without eating again.' },
+    { name: 'chameleon', text: 'The chameleon is a slow-moving tree lizard famous for changing the colour of its skin to signal mood and blend with its surroundings. Its two eyes swivel independently, scanning in different directions at once, until it spots an insect. Then it shoots out a long, sticky tongue faster than the eye can follow to snatch the prey. Gripping feet and a curling tail let it climb carefully among the branches.' },
+    { name: 'tortoise', text: 'The tortoise is a slow land reptile that carries a high, domed shell it can pull its head and legs into for protection. It plods across dry ground grazing on grass, leaves, and fruit, needing little food or water to survive. Cold-blooded, it basks in the sun to warm up and shelters from the midday heat. Some tortoises are among the longest-lived of all animals, reaching well over a hundred years.' },
+    { name: 'frog', text: 'The frog is an amphibian that begins life as a tadpole swimming in water, breathing through gills before it grows legs and lungs. As an adult it leaps on long, powerful hind legs and catches insects with a quick flick of its sticky tongue. Its moist skin must stay damp, so frogs live near ponds and streams and many call loudly at dusk to attract a mate. The eggs are laid in water, and the cycle begins again.' },
+    { name: 'salamander', text: 'The salamander is a slender amphibian with a long tail and smooth, moist skin that must be kept damp. It haunts cool, wet forests and the edges of streams, hunting worms and insects mostly at night. Remarkably, a salamander can regrow a lost leg or tail, healing injuries that would cripple most animals. Like the frog, many salamanders begin life in water before moving onto land.' }
   ];
 
   function setStatus(msg, isError) {
@@ -188,6 +251,9 @@ description: Build a similarity network in your browser — drop in text files a
   let docs = [];        // { name, text }
   let vectors = [];     // Float32Array per doc (normalized)
   let sim = [];         // sim[i][j]
+  let docTermCounts = [];  // per doc: Map(term -> count in that doc)
+  let idf = null;          // Map(term -> inverse document frequency over the corpus)
+  let nodeKeywords = [];   // per doc: [{ term, score }] most distinctive first
   let embedder = null;
   let embedderPromise = null;
   let busy = false;
@@ -294,6 +360,7 @@ description: Build a similarity network in your browser — drop in text files a
       setStatus('Computing similarities…');
       await paint();
       computeSimilarity();
+      computeKeywords();
 
       setStatus('Laying out the network…');
       await paint();
@@ -380,6 +447,61 @@ description: Build a similarity network in your browser — drop in text files a
     }
   }
 
+  // ── Keywords (potential affinities, in the sense of Rodighiero, Kaplan &
+  // Beaude 2018): the words most distinctive to each doc relative to the whole
+  // corpus. Plain regex tokens + TF-IDF, no lemmatiser and no stopword list, so
+  // it stays language-agnostic like the embedder — ubiquitous words fall out on
+  // their own because a term in every doc has zero inverse document frequency. ──
+  const TOKEN_RE = /[\p{L}][\p{L}\p{M}'’-]*/gu;
+  const KW_PER_NODE = 8;
+
+  function computeKeywords() {
+    const n = docs.length;
+    docTermCounts = [];
+    const df = new Map();
+    for (let i = 0; i < n; i++) {
+      const counts = new Map();
+      const text = docs[i].text.toLowerCase();
+      let m;
+      while ((m = TOKEN_RE.exec(text))) {
+        const t = m[0];
+        if (t.length < 3) continue;
+        counts.set(t, (counts.get(t) || 0) + 1);
+      }
+      docTermCounts.push(counts);
+      counts.forEach(function (_c, t) { df.set(t, (df.get(t) || 0) + 1); });
+    }
+    idf = new Map();
+    df.forEach(function (d, t) { idf.set(t, Math.log(n / d)); });
+    nodeKeywords = docTermCounts.map(function (counts) {
+      const scored = [];
+      counts.forEach(function (c, t) {
+        const s = c * idf.get(t);
+        if (s > 0) scored.push({ term: t, score: s });
+      });
+      scored.sort(function (a, b) { return b.score - a.score; });
+      return scored.slice(0, KW_PER_NODE);
+    });
+  }
+
+  // The words two docs most share — their common vocabulary — ranked by how
+  // distinctive the shared terms are (combined count × inverse document
+  // frequency). Returns up to `limit` bare terms.
+  function edgeKeywords(a, b, limit) {
+    const ca = docTermCounts[a], cb = docTermCounts[b];
+    if (!ca || !cb) return [];
+    const small = ca.size <= cb.size ? ca : cb;
+    const other = small === ca ? cb : ca;
+    const shared = [];
+    small.forEach(function (c, t) {
+      if (!other.has(t)) return;
+      const w = idf.get(t) || 0;
+      if (w > 0) shared.push({ term: t, score: (c + other.get(t)) * w });
+    });
+    shared.sort(function (a2, b2) { return b2.score - a2.score; });
+    return shared.slice(0, limit || 3).map(function (s) { return s.term; });
+  }
+
   // Each node links to its single strongest neighbour, if it clears the threshold.
   function buildLinks(threshold) {
     const n = docs.length;
@@ -453,6 +575,10 @@ description: Build a similarity network in your browser — drop in text files a
   let svg, nodeSel, linkSel, labelSel, simulation, nodes;
   let labelsOn = false;
   let shortenOn = false;
+  let elevationOn = false;
+  let lastContourAt = 0; // throttle: contourDensity is too heavy to run every tick
+  let edgeKwOn = false;
+  let edgeLabelSel = null;
 
   // Trim a long title to a compact label, breaking on a word boundary.
   function shortenTitle(name) {
@@ -481,9 +607,11 @@ description: Build a similarity network in your browser — drop in text files a
 
     svg = d3.select('#net');
     svg.selectAll('*').remove();
+    svg.append('g').attr('class', 'contours'); // behind everything else
     const linkLayer = svg.append('g').attr('class', 'links');
+    svg.append('g').attr('class', 'edge-labels'); // over the links, under node labels
     const nodeLayer = svg.append('g').attr('class', 'nodes');
-    const labelLayer = svg.append('g').attr('class', 'labels');
+    const labelLayer = svg.append('g').attr('class', 'labels'); // topmost, so node titles/hover sit over everything
 
     let links = buildLinks(+thresholdEl.value);
 
@@ -514,10 +642,36 @@ description: Build a similarity network in your browser — drop in text files a
       .force('x', d3.forceX(dim.w / 2).strength(+gravityEl.value))
       .force('y', d3.forceY(dim.h / 2).strength(+gravityEl.value))
       .force('collide', d3.forceCollide().radius(NODE_RADIUS + (+spacingEl.value)))
-      .on('tick', ticked);
+      .on('tick', ticked)
+      .on('end', function () { if (elevationOn) drawContours(); });
 
     drawLinks(links);
+    drawEdgeKeywords(links);
     applyLabels();
+    drawContours();
+  }
+
+  // ── Elevation map: topographic density contours over the node positions.
+  // Rebuilt from the live x/y each time it's drawn; d3.geoPath renders the
+  // contourDensity polygons straight in screen space (no projection). ──
+  function drawContours() {
+    if (!svg) return;
+    const layer = svg.select('g.contours');
+    if (!elevationOn || !nodes) { layer.selectAll('*').remove(); return; }
+    const placed = nodes.filter(function (d) { return d.x != null && d.y != null; });
+    if (placed.length < 2) { layer.selectAll('*').remove(); return; }
+    const dim = stageDim();
+    const contours = d3.contourDensity()
+      .x(function (d) { return d.x; })
+      .y(function (d) { return d.y; })
+      .size([dim.w, dim.h])
+      .cellSize(8)
+      .bandwidth(+elevBandwidthEl.value)
+      .thresholds(+elevLevelsEl.value)(placed);
+    const geoPath = d3.geoPath();
+    const sel = layer.selectAll('path').data(contours);
+    sel.exit().remove();
+    sel.enter().append('path').merge(sel).attr('d', geoPath);
   }
 
   // Show every node's name when the labels switch is on; otherwise leave labels
@@ -527,14 +681,65 @@ description: Build a similarity network in your browser — drop in text files a
     nodes.forEach(function (n) { setLabel(n.i, labelsOn ? displayName(n.name) : ''); });
   }
 
+  // Stable key for a link, whether its endpoints are still indices (freshly
+  // built) or node objects (once forceLink has resolved them).
+  function linkKey(d) {
+    const s = d.source.i != null ? d.source.i : d.source;
+    const t = d.target.i != null ? d.target.i : d.target;
+    return s < t ? s + ':' + t : t + ':' + s;
+  }
+
   function drawLinks(links) {
-    linkSel = svg.select('g.links').selectAll('line').data(links, function (d) {
-      const s = d.source.i != null ? d.source.i : d.source;
-      const t = d.target.i != null ? d.target.i : d.target;
-      return s < t ? s + ':' + t : t + ':' + s;
-    });
+    linkSel = svg.select('g.links').selectAll('line').data(links, linkKey);
     linkSel.exit().remove();
     linkSel = linkSel.enter().append('line').attr('class', 'link').merge(linkSel);
+  }
+
+  // Order words so the longest sits in the middle and shorter ones fan out
+  // above and below, giving the stacked label a symmetric lens silhouette.
+  function arrangeByLength(terms) {
+    const sorted = terms.slice().sort(function (a, b) { return b.length - a.length; });
+    const up = [], down = [];
+    for (let k = 0; k < sorted.length; k++) {
+      if (k === 0) down.push(sorted[0]);        // centre: the longest word
+      else if (k % 2 === 1) up.unshift(sorted[k]); // next longest above
+      else down.push(sorted[k]);                   // then below, and so on
+    }
+    return up.concat(down);
+  }
+
+  // Label each link with the vocabulary its two docs most share, stacked
+  // vertically and centred on the link midpoint.
+  const EDGE_LINE_H = 1.15; // em between stacked keywords
+  function drawEdgeKeywords(links) {
+    if (!svg) return;
+    const layer = svg.select('g.edge-labels');
+    if (!edgeKwOn) { layer.selectAll('*').remove(); edgeLabelSel = null; return; }
+    const count = +edgeKwCountEl.value;
+    const sel = layer.selectAll('text').data(links, linkKey);
+    sel.exit().remove();
+    edgeLabelSel = sel.enter().append('text').attr('class', 'edge-kw').merge(sel);
+    edgeLabelSel.each(function (d) {
+      const s = d.source.i != null ? d.source.i : d.source;
+      const t = d.target.i != null ? d.target.i : d.target;
+      const lines = arrangeByLength(edgeKeywords(s, t, count));
+      const n = lines.length;
+      const el = d3.select(this);
+      el.selectAll('tspan').remove();
+      lines.forEach(function (term, i) {
+        const dy = i === 0 ? (-(n - 1) / 2 * EDGE_LINE_H + 0.32) : EDGE_LINE_H;
+        el.append('tspan').attr('x', 0).attr('dy', dy + 'em').text(term);
+      });
+    });
+    positionEdgeKw();
+  }
+
+  // Park each edge label on its link's midpoint.
+  function positionEdgeKw() {
+    if (!edgeLabelSel) return;
+    edgeLabelSel.attr('transform', function (d) {
+      return 'translate(' + ((d.source.x + d.target.x) / 2) + ',' + ((d.source.y + d.target.y) / 2) + ')';
+    });
   }
 
   function ticked() {
@@ -543,6 +748,11 @@ description: Build a similarity network in your browser — drop in text files a
       .attr('x2', function (d) { return d.target.x; }).attr('y2', function (d) { return d.target.y; });
     nodeSel.attr('transform', function (d) { return 'translate(' + d.x + ',' + d.y + ')'; });
     labelSel.attr('transform', function (d) { return 'translate(' + d.x + ',' + d.y + ')'; });
+    if (edgeKwOn) positionEdgeKw();
+    if (elevationOn) {
+      const now = performance.now();
+      if (now - lastContourAt > 90) { lastContourAt = now; drawContours(); }
+    }
   }
 
   function setLabel(i, name) {
@@ -631,6 +841,7 @@ description: Build a similarity network in your browser — drop in text files a
     const links = buildLinks(+thresholdEl.value);
     simulation.force('link').links(links);
     drawLinks(links);
+    drawEdgeKeywords(links);
     simulation.alpha(0.6).restart();
     renderStats();
   });
@@ -677,6 +888,40 @@ description: Build a similarity network in your browser — drop in text files a
   shortenToggle.addEventListener('change', function () {
     shortenOn = shortenToggle.checked;
     applyLabels();
+  });
+
+  // ── Elevation map on/off (smoothing + levels are sub-options) ──
+  elevationToggle.addEventListener('change', function () {
+    elevationOn = elevationToggle.checked;
+    elevationSub.hidden = !elevationOn;
+    lastContourAt = 0;
+    drawContours();
+  });
+
+  // ── Elevation smoothing (contour bandwidth) ──
+  elevBandwidthEl.addEventListener('input', function () {
+    elevBandwidthVal.textContent = elevBandwidthEl.value;
+    if (elevationOn) { lastContourAt = 0; drawContours(); }
+  });
+
+  // ── Elevation levels (contour thresholds) ──
+  elevLevelsEl.addEventListener('input', function () {
+    elevLevelsVal.textContent = elevLevelsEl.value;
+    if (elevationOn) { lastContourAt = 0; drawContours(); }
+  });
+
+  // ── Edge keywords on/off (word count is a sub-option) ──
+  edgeKwToggle.addEventListener('change', function () {
+    edgeKwOn = edgeKwToggle.checked;
+    edgeKwSub.hidden = !edgeKwOn;
+    if (!simulation) return;
+    drawEdgeKeywords(simulation.force('link').links());
+  });
+
+  // ── Number of keywords shown per edge ──
+  edgeKwCountEl.addEventListener('input', function () {
+    edgeKwCountVal.textContent = edgeKwCountEl.value;
+    if (edgeKwOn && simulation) drawEdgeKeywords(simulation.force('link').links());
   });
 
   // ── PNG export at 1× / 2× / 4× ──

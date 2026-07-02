@@ -96,7 +96,30 @@
   stroke-width: 3px;
   stroke-linejoin: round;
 }
+/* Elevation map: density contour lines behind the graph, so dense clusters
+   read as high ground on a topographic map. Line-only (no fill); currentColor
+   tracks --fg so it flips with dark mode. */
+#network-view .contours { color: var(--fg); pointer-events: none; }
+#network-view .contours path {
+  fill: none;
+  stroke: currentColor;
+  stroke-opacity: 0.3;
+  stroke-width: 0.5;
+}
 #network-view .link { stroke: var(--fg); stroke-width: 0.5; pointer-events: none; }
+/* Edge keywords: the vocabulary two linked files most share, sat on the link
+   midpoint. Gray, echoing the paper's colour code for potential affinities. */
+#network-view .edge-labels text.edge-kw {
+  font-family: var(--font);
+  font-size: var(--text-xxs);
+  fill: var(--muted);
+  pointer-events: none;
+  text-anchor: middle;
+  paint-order: stroke;
+  stroke: var(--bg);
+  stroke-width: 3px;
+  stroke-linejoin: round;
+}
 /* A translation is the same work in another language: an ordinary node,
    set apart only by a more pronounced dashed edge to its original. */
 #network-view .link.translation { stroke-width: 0.9; stroke-dasharray: 3 2.5; }

@@ -191,6 +191,11 @@ html.dark .studio-status.error { color: #ff7a6b; }
 
 /* Layout controls */
 .studio-controls[hidden] { display: none; }
+/* Nested sub-options that belong to the control above them (e.g. the elevation
+   map's smoothing/levels sliders under its on/off switch). */
+.control-sub { margin-left: 0.9rem; padding-left: 0.7rem; border-left: 1px solid var(--border); }
+.control-sub[hidden] { display: none; }
+.control-sub .studio-control:first-child { margin-top: 0.6rem; }
 .studio-control {
   margin: 1rem 0 0;
   padding-top: 0.9rem;
