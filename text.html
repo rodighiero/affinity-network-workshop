@@ -479,13 +479,16 @@ In conclusion, this text presents a series of experiments that explore the poten
   // whole-doc pass; verbs are reduced to the infinitive one unique form at a
   // time — per-word conjugation is ~100× faster than transforming the whole
   // verb view, which is O(n²)-ish on a long document.
+  // Nouns whose singular equals their plural; compromise wrongly de-pluralises
+  // them (e.g. "means" → "mean"), so we keep the surface form for these.
+  const INVARIANT_NOUNS = new Set(['means', 'species', 'series', 'news']);
   function buildLemmatizer(doc) {
     const map = new Map();
     const orig = doc.nouns().terms().out('array');
     const sing = doc.clone().nouns().toSingular().terms().out('array');
     for (let i = 0; i < orig.length; i++) {
       const s = cleanTok(orig[i]);
-      if (s) map.set(s, cleanTok(sing[i]) || s);
+      if (s) map.set(s, INVARIANT_NOUNS.has(s) ? s : (cleanTok(sing[i]) || s));
     }
     [...new Set(doc.verbs().terms().out('array').map(cleanTok))].forEach(function (w) {
       if (w && !map.has(w)) map.set(w, cleanTok(nlp(w).verbs().toInfinitive().text()) || w);
@@ -595,7 +598,7 @@ In conclusion, this text presents a series of experiments that explore the poten
   function entityList(view) {
     const m = new Map();
     view.out('array').forEach(function (s) {
-      const disp = s.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}.]+$/gu, '').trim();
+      const disp = s.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '').trim();
       if (!disp) return;
       const key = disp.toLowerCase();
       const e = m.get(key) || { text: disp, n: 0 };
