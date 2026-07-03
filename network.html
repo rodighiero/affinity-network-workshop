@@ -843,6 +843,7 @@ description: Build a similarity network in your browser — drop in text files a
 
     const style = document.createElementNS(SVGNS, 'style');
     style.textContent =
+      '.contours path{fill:none;stroke:' + fg + ';stroke-opacity:0.3;stroke-width:0.5}' +
       '.marker{fill:' + bg + ';stroke:' + fg + ';stroke-width:0.5}' +
       '.link{stroke:' + fg + ';stroke-width:0.5}' +
       '.labels text{font-family:' + fontFamily + ';font-size:' + fontSize + ';fill:' + fg +
