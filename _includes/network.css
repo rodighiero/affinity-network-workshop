@@ -86,7 +86,7 @@
 #network-view .node.hover .ring { opacity: 1; }
 #network-view .labels text {
   font-family: var(--font);
-  font-size: var(--text-xs);
+  font-size: var(--label-size, var(--text-xs));
   fill: var(--fg);
   pointer-events: none;
   text-anchor: middle;
@@ -110,7 +110,7 @@
    midpoint. Gray, echoing the paper's colour code for potential affinities. */
 #network-view .edge-labels text.edge-kw {
   font-family: var(--font);
-  font-size: var(--text-xxs);
+  font-size: var(--edge-kw-size, var(--text-xxs));
   fill: var(--muted);
   pointer-events: none;
   text-anchor: middle;

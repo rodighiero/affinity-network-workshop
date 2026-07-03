@@ -52,6 +52,11 @@ description: Build a similarity network in your browser — drop in text files a
         <input type="checkbox" id="shorten-toggle" class="switch-input" disabled>
         <span class="switch" aria-hidden="true"></span>
       </label>
+      <div class="studio-control slider-row">
+        <span class="sname" title="Font size of the node labels.">Label size</span>
+        <input type="range" id="label-size" min="8" max="24" step="1" value="12" aria-label="Label font size">
+        <span class="val" id="label-size-val">12</span>
+      </div>
       <label class="studio-control switch-row">
         <span class="switch-label" title="Draw density contours behind the graph, so clusters of similar files rise like high ground on a topographic map.">Elevation map</span>
         <input type="checkbox" id="elevation-toggle" class="switch-input">
@@ -79,6 +84,11 @@ description: Build a similarity network in your browser — drop in text files a
           <span class="sname" title="How many shared words to show on each link. Fewer keeps it legible; more reveals the fuller common vocabulary.">Keywords</span>
           <input type="range" id="edgekw-count" min="1" max="6" step="1" value="3" aria-label="Number of edge keywords">
           <span class="val" id="edgekw-count-val">3</span>
+        </div>
+        <div class="studio-control slider-row">
+          <span class="sname" title="Font size of the words shown on each link.">Text size</span>
+          <input type="range" id="edgekw-size" min="6" max="20" step="1" value="8" aria-label="Edge keyword font size">
+          <span class="val" id="edgekw-size-val">8</span>
         </div>
       </div>
       <div class="studio-control slider-row">
@@ -161,6 +171,10 @@ description: Build a similarity network in your browser — drop in text files a
   const linkdistVal = document.getElementById('linkdist-val');
   const labelsToggle = document.getElementById('labels-toggle');
   const shortenToggle = document.getElementById('shorten-toggle');
+  const labelSizeEl = document.getElementById('label-size');
+  const labelSizeVal = document.getElementById('label-size-val');
+  const edgeKwSizeEl = document.getElementById('edgekw-size');
+  const edgeKwSizeVal = document.getElementById('edgekw-size-val');
   const elevationToggle = document.getElementById('elevation-toggle');
   const elevationSub = document.getElementById('elevation-sub');
   const elevBandwidthEl = document.getElementById('elev-bandwidth');
@@ -648,6 +662,7 @@ description: Build a similarity network in your browser — drop in text files a
     drawLinks(links);
     drawEdgeKeywords(links);
     applyLabels();
+    applyFontSizes();
     drawContours();
   }
 
@@ -661,17 +676,39 @@ description: Build a similarity network in your browser — drop in text files a
     const placed = nodes.filter(function (d) { return d.x != null && d.y != null; });
     if (placed.length < 2) { layer.selectAll('*').remove(); return; }
     const dim = stageDim();
-    const contours = d3.contourDensity()
+    const density = d3.contourDensity()
       .x(function (d) { return d.x; })
       .y(function (d) { return d.y; })
       .size([dim.w, dim.h])
       .cellSize(8)
-      .bandwidth(+elevBandwidthEl.value)
-      .thresholds(+elevLevelsEl.value)(placed);
+      .bandwidth(+elevBandwidthEl.value);
+    // Place exactly "Levels" evenly spaced contour lines between zero and the
+    // peak density. Passing an explicit threshold array — rather than a count,
+    // which d3 rounds to "nice" values off a bandwidth-dependent peak — keeps
+    // the number of lines fixed, so Smoothing reshapes the contours smoothly
+    // instead of snapping a whole band in or out as the density peak shifts. A
+    // cheap fine-count first pass estimates the peak density.
+    const peak = d3.max(density.thresholds(40)(placed), function (c) { return c.value; }) || 0;
+    const levels = +elevLevelsEl.value;
+    const step = peak / (levels + 1);
+    const thresholds = [];
+    for (let k = 1; k <= levels && step > 0; k++) thresholds.push(k * step);
+    const contours = density.thresholds(thresholds)(placed);
     const geoPath = d3.geoPath();
     const sel = layer.selectAll('path').data(contours);
     sel.exit().remove();
     sel.enter().append('path').merge(sel).attr('d', geoPath);
+  }
+
+  // Drive the label and edge-keyword font sizes from the sliders. Both are set
+  // as CSS variables on the graph's <svg>, which the .labels / .edge-kw rules
+  // read (with the design tokens as fallbacks), so new text inherits the size
+  // too. Re-park the edge labels so their stacked lines re-space at the new size.
+  function applyFontSizes() {
+    if (!svg) return;
+    svg.style('--label-size', labelSizeEl.value + 'px');
+    svg.style('--edge-kw-size', edgeKwSizeEl.value + 'px');
+    if (edgeKwOn) positionEdgeKw();
   }
 
   // Show every node's name when the labels switch is on; otherwise leave labels
@@ -775,6 +812,7 @@ description: Build a similarity network in your browser — drop in text files a
     const root = getComputedStyle(document.documentElement);
     const fg = (root.getPropertyValue('--fg') || '#000').trim();
     const bg = (root.getPropertyValue('--bg') || '#fff').trim();
+    const muted = (root.getPropertyValue('--muted') || fg).trim();
     let fontFamily = 'sans-serif', fontSize = '11px';
     const oneLabel = svg.select('.labels text').node();
     if (oneLabel) {
@@ -782,6 +820,10 @@ description: Build a similarity network in your browser — drop in text files a
       fontFamily = cs.fontFamily || fontFamily;
       fontSize = cs.fontSize || fontSize;
     }
+    // Carry the edge-keyword size (from its slider) into the export too.
+    let edgeFontSize = null;
+    const oneEdge = svg.select('.edge-labels text.edge-kw').node();
+    if (oneEdge) edgeFontSize = getComputedStyle(oneEdge).fontSize;
 
     // Rendering the SVG at the scaled width/height (viewBox stays at w×h) makes
     // the browser rasterise the vector at full resolution — crisp at 2× and 4×,
@@ -798,7 +840,9 @@ description: Build a similarity network in your browser — drop in text files a
       '.marker{fill:' + bg + ';stroke:' + fg + ';stroke-width:0.5}' +
       '.link{stroke:' + fg + ';stroke-width:0.5}' +
       '.labels text{font-family:' + fontFamily + ';font-size:' + fontSize + ';fill:' + fg +
-      ';text-anchor:middle;paint-order:stroke;stroke:' + bg + ';stroke-width:3px;stroke-linejoin:round}';
+      ';text-anchor:middle;paint-order:stroke;stroke:' + bg + ';stroke-width:3px;stroke-linejoin:round}' +
+      (edgeFontSize ? '.edge-labels text.edge-kw{font-family:' + fontFamily + ';font-size:' + edgeFontSize + ';fill:' + muted +
+        ';text-anchor:middle;paint-order:stroke;stroke:' + bg + ';stroke-width:3px;stroke-linejoin:round}' : '');
 
     const rect = document.createElementNS(SVGNS, 'rect');
     rect.setAttribute('width', w);
@@ -888,6 +932,18 @@ description: Build a similarity network in your browser — drop in text files a
   shortenToggle.addEventListener('change', function () {
     shortenOn = shortenToggle.checked;
     applyLabels();
+  });
+
+  // ── Node label font size ──
+  labelSizeEl.addEventListener('input', function () {
+    labelSizeVal.textContent = labelSizeEl.value;
+    applyFontSizes();
+  });
+
+  // ── Edge keyword font size ──
+  edgeKwSizeEl.addEventListener('input', function () {
+    edgeKwSizeVal.textContent = edgeKwSizeEl.value;
+    applyFontSizes();
   });
 
   // ── Elevation map on/off (smoothing + levels are sub-options) ──
