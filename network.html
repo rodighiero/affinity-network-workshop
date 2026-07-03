@@ -126,9 +126,8 @@ description: Build a similarity network in your browser — drop in text files a
     <div class="stage-corner" id="stage-corner" hidden>
       <div class="export-overlay">
         <span class="export-label">Download</span>
-        <button type="button" class="export-btn" data-scale="1">1×</button>
-        <button type="button" class="export-btn" data-scale="2">2×</button>
-        <button type="button" class="export-btn" data-scale="4">4×</button>
+        <button type="button" class="export-btn" data-scale="4" title="Download a 4× PNG">PNG</button>
+        <button type="button" class="export-btn" id="export-svg" title="Download a resolution-independent vector SVG">SVG</button>
       </div>
       <div class="stats-overlay" id="stats" aria-live="polite"></div>
     </div>
@@ -806,11 +805,13 @@ description: Build a similarity network in your browser — drop in text files a
 
   const SVGNS = 'http://www.w3.org/2000/svg';
 
-  // Rasterise the current graph to a PNG at the given pixel scale and download
-  // it. The SVG is rebuilt standalone (external CSS won't apply once it's an
-  // <img>), with concrete colours/fonts inlined and a background drawn in.
-  function exportPNG(scale) {
-    if (!svg || !nodes) { setStatus('Build a network before downloading.', true); return; }
+  // Build a standalone, self-contained SVG of the current graph. External CSS
+  // won't travel with a downloaded file, so concrete colours/fonts are inlined
+  // and a background rect is drawn in. Width/height are the on-screen size ×
+  // `scale` while the viewBox stays at w×h, so a rasteriser renders crisply at
+  // 2×/4×; an SVG download just uses scale 1. Returns the serialized string plus
+  // the pixel dimensions.
+  function buildStandaloneSVG(scale) {
     const dim = stageDim();
     const w = dim.w, h = dim.h;
     const sw = Math.round(w * scale), sh = Math.round(h * scale);
@@ -831,9 +832,6 @@ description: Build a similarity network in your browser — drop in text files a
     const oneEdge = svg.select('.edge-labels text.edge-kw').node();
     if (oneEdge) edgeFontSize = getComputedStyle(oneEdge).fontSize;
 
-    // Rendering the SVG at the scaled width/height (viewBox stays at w×h) makes
-    // the browser rasterise the vector at full resolution — crisp at 2× and 4×,
-    // rather than upscaling a 1× bitmap.
     const clone = svg.node().cloneNode(true);
     clone.setAttribute('xmlns', SVGNS);
     clone.setAttribute('width', sw);
@@ -858,28 +856,46 @@ description: Build a similarity network in your browser — drop in text files a
     clone.insertBefore(rect, clone.firstChild);
     clone.insertBefore(style, clone.firstChild);
 
-    const svgStr = new XMLSerializer().serializeToString(clone);
-    const url = URL.createObjectURL(new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' }));
+    return { svgStr: new XMLSerializer().serializeToString(clone), sw: sw, sh: sh };
+  }
+
+  // Trigger a download of `blob` under `filename`.
+  function downloadBlob(blob, filename) {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
+  }
+
+  // Rasterise the standalone SVG to a PNG at the given pixel scale and download.
+  function exportPNG(scale) {
+    if (!svg || !nodes) { setStatus('Build a network before downloading.', true); return; }
+    const out = buildStandaloneSVG(scale);
+    const url = URL.createObjectURL(new Blob([out.svgStr], { type: 'image/svg+xml;charset=utf-8' }));
     const img = new Image();
     img.onload = function () {
       const canvas = document.createElement('canvas');
-      canvas.width = sw;
-      canvas.height = sh;
+      canvas.width = out.sw;
+      canvas.height = out.sh;
       canvas.getContext('2d').drawImage(img, 0, 0);
       URL.revokeObjectURL(url);
       canvas.toBlob(function (blob) {
         if (!blob) { setStatus('Could not create the PNG.', true); return; }
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = 'similarity-network@' + scale + 'x.png';
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
+        downloadBlob(blob, 'similarity-network@' + scale + 'x.png');
       }, 'image/png');
     };
     img.onerror = function () { URL.revokeObjectURL(url); setStatus('Could not render the image for download.', true); };
     img.src = url;
+  }
+
+  // Download the graph as a resolution-independent vector SVG.
+  function exportSVG() {
+    if (!svg || !nodes) { setStatus('Build a network before downloading.', true); return; }
+    const out = buildStandaloneSVG(1);
+    downloadBlob(new Blob([out.svgStr], { type: 'image/svg+xml;charset=utf-8' }), 'similarity-network.svg');
   }
 
   // Reheat the simulation so a force change takes visible effect.
@@ -989,9 +1005,12 @@ description: Build a similarity network in your browser — drop in text files a
   });
 
   // ── PNG export at 1× / 2× / 4× ──
-  document.querySelectorAll('.export-btn').forEach(function (b) {
+  document.querySelectorAll('.export-btn[data-scale]').forEach(function (b) {
     b.addEventListener('click', function () { exportPNG(+b.dataset.scale); });
   });
+
+  // ── SVG (vector) export ──
+  document.getElementById('export-svg').addEventListener('click', exportSVG);
 
   // ── Drop zone wiring ──
   ['dragenter', 'dragover'].forEach(function (ev) {
