@@ -47,15 +47,17 @@ description: Build a similarity network in your browser — drop in text files a
         <input type="checkbox" id="labels-toggle" class="switch-input">
         <span class="switch" aria-hidden="true"></span>
       </label>
-      <label class="studio-control switch-row">
-        <span class="switch-label">Shorten titles</span>
-        <input type="checkbox" id="shorten-toggle" class="switch-input" disabled>
-        <span class="switch" aria-hidden="true"></span>
-      </label>
-      <div class="studio-control slider-row">
-        <span class="sname" title="Font size of the node labels.">Label size</span>
-        <input type="range" id="label-size" min="8" max="24" step="1" value="12" aria-label="Label font size">
-        <span class="val" id="label-size-val">12</span>
+      <div class="control-sub" id="labels-sub" hidden>
+        <div class="studio-control slider-row">
+          <span class="sname" title="Trim long titles to this many characters, breaking on a word boundary. At the maximum, titles are shown in full.">Title length</span>
+          <input type="range" id="title-len" min="8" max="40" step="1" value="40" aria-label="Title length">
+          <span class="val" id="title-len-val">Full</span>
+        </div>
+        <div class="studio-control slider-row">
+          <span class="sname" title="Font size of the node labels.">Label size</span>
+          <input type="range" id="label-size" min="8" max="24" step="1" value="12" aria-label="Label font size">
+          <span class="val" id="label-size-val">12</span>
+        </div>
       </div>
       <label class="studio-control switch-row">
         <span class="switch-label" title="Draw density contours behind the graph, so clusters of similar files rise like high ground on a topographic map.">Elevation map</span>
@@ -170,7 +172,9 @@ description: Build a similarity network in your browser — drop in text files a
   const linkdistEl = document.getElementById('linkdist');
   const linkdistVal = document.getElementById('linkdist-val');
   const labelsToggle = document.getElementById('labels-toggle');
-  const shortenToggle = document.getElementById('shorten-toggle');
+  const labelsSub = document.getElementById('labels-sub');
+  const titleLenEl = document.getElementById('title-len');
+  const titleLenVal = document.getElementById('title-len-val');
   const labelSizeEl = document.getElementById('label-size');
   const labelSizeVal = document.getElementById('label-size-val');
   const edgeKwSizeEl = document.getElementById('edgekw-size');
@@ -588,21 +592,23 @@ description: Build a similarity network in your browser — drop in text files a
   // ── Live force graph (reuses the Network page's visual classes) ──
   let svg, nodeSel, linkSel, labelSel, simulation, nodes;
   let labelsOn = false;
-  let shortenOn = false;
   let elevationOn = false;
   let lastContourAt = 0; // throttle: contourDensity is too heavy to run every tick
   let edgeKwOn = false;
   let edgeLabelSel = null;
 
-  // Trim a long title to a compact label, breaking on a word boundary.
-  function shortenTitle(name) {
-    const MAX = 22;
-    if (name.length <= MAX) return name;
-    const cut = name.slice(0, MAX);
+  // Trim a long title to `max` characters, breaking on a word boundary.
+  function shortenTitle(name, max) {
+    if (name.length <= max) return name;
+    const cut = name.slice(0, max);
     const sp = cut.lastIndexOf(' ');
     return (sp > 8 ? cut.slice(0, sp) : cut).replace(/[\s—–-]+$/, '') + '…';
   }
-  function displayName(name) { return shortenOn ? shortenTitle(name) : name; }
+  // The "Title length" slider sets the cap; at its maximum, titles are full.
+  function displayName(name) {
+    const max = +titleLenEl.value;
+    return max >= +titleLenEl.max ? name : shortenTitle(name, max);
+  }
 
   function stageDim() {
     const stage = document.querySelector('#network-view .stage');
@@ -795,7 +801,7 @@ description: Build a similarity network in your browser — drop in text files a
   function setLabel(i, name) {
     const el = labelSel.filter(function (d) { return d.i === i; });
     el.selectAll('tspan').remove();
-    if (name) el.append('tspan').attr('x', 0).attr('y', -10).text(name);
+    if (name) el.append('tspan').attr('x', 0).attr('y', 0).text(name);
   }
 
   const SVGNS = 'http://www.w3.org/2000/svg';
@@ -840,7 +846,7 @@ description: Build a similarity network in your browser — drop in text files a
       '.marker{fill:' + bg + ';stroke:' + fg + ';stroke-width:0.5}' +
       '.link{stroke:' + fg + ';stroke-width:0.5}' +
       '.labels text{font-family:' + fontFamily + ';font-size:' + fontSize + ';fill:' + fg +
-      ';text-anchor:middle;paint-order:stroke;stroke:' + bg + ';stroke-width:3px;stroke-linejoin:round}' +
+      ';text-anchor:middle;dominant-baseline:central;paint-order:stroke;stroke:' + bg + ';stroke-width:3px;stroke-linejoin:round}' +
       (edgeFontSize ? '.edge-labels text.edge-kw{font-family:' + fontFamily + ';font-size:' + edgeFontSize + ';fill:' + muted +
         ';text-anchor:middle;paint-order:stroke;stroke:' + bg + ';stroke-width:3px;stroke-linejoin:round}' : '');
 
@@ -921,16 +927,17 @@ description: Build a similarity network in your browser — drop in text files a
     nudge();
   });
 
-  // ── Labels on/off (shorten is a sub-option, only meaningful with labels on) ──
+  // ── Labels on/off (title length + label size live in the labels sub-panel) ──
   labelsToggle.addEventListener('change', function () {
     labelsOn = labelsToggle.checked;
-    shortenToggle.disabled = !labelsOn;
+    labelsSub.hidden = !labelsOn;
     applyLabels();
   });
 
-  // ── Shorten titles on/off ──
-  shortenToggle.addEventListener('change', function () {
-    shortenOn = shortenToggle.checked;
+  // ── Title length: cap label characters (or full at the maximum) ──
+  titleLenEl.addEventListener('input', function () {
+    const max = +titleLenEl.value;
+    titleLenVal.textContent = max >= +titleLenEl.max ? 'Full' : max;
     applyLabels();
   });
 
