@@ -3,10 +3,10 @@ layout: default
 title: Network
 permalink: /network/
 styles: [network.css, studio.css]
-description: Build a similarity network in your browser — drop in text files and watch them arrange by meaning. Nothing leaves your machine.
+description: Build an affinity network in your browser — drop in text files and watch them arrange by meaning. Nothing leaves your machine.
 ---
 <header class="page-head">
-  <p>Drop in a set of text files and watch them arrange into a similarity network — embedding, similarity, and layout all run live in your browser. Your files never leave this machine.</p>
+  <p>Drop in a set of text files and watch them arrange into an affinity network — embedding, similarity, and layout all run live in your browser. Your files never leave this machine.</p>
 </header>
 
 <div id="network-view" class="studio-view">
@@ -122,7 +122,7 @@ description: Build a similarity network in your browser — drop in text files a
   </div>
 
   <div class="stage">
-    <p class="stage-empty" id="stage-empty">Your similarity network will appear here.<br><span>Add files or load the sample set, then build.</span></p>
+    <p class="stage-empty" id="stage-empty">Your affinity network will appear here.<br><span>Add files or load the sample set, then build.</span></p>
     <div class="stage-corner" id="stage-corner" hidden>
       <div class="export-overlay">
         <span class="export-label">Download</span>
@@ -131,7 +131,11 @@ description: Build a similarity network in your browser — drop in text files a
       </div>
       <div class="stats-overlay" id="stats" aria-live="polite"></div>
     </div>
-    <svg id="net" aria-label="Live similarity network"></svg>
+    <svg id="net" aria-label="Live affinity network"></svg>
+    <div class="zoom-controls" id="zoom-controls" hidden>
+      <button type="button" class="zoom-btn" id="zoom-in" aria-label="Zoom in" title="Zoom in">+</button>
+      <button type="button" class="zoom-btn" id="zoom-out" aria-label="Zoom out" title="Zoom out">−</button>
+    </div>
   </div>
 </div>
 
@@ -196,6 +200,7 @@ description: Build a similarity network in your browser — drop in text files a
   const stageEmpty = document.getElementById('stage-empty');
   const statsEl = document.getElementById('stats');
   const stageCorner = document.getElementById('stage-corner');
+  const zoomControls = document.getElementById('zoom-controls');
 
   // A small built-in corpus so the page is usable without your own files. All
   // animals, in five loose themes (big cats, ocean animals, birds, insects,
@@ -415,6 +420,7 @@ description: Build a similarity network in your browser — drop in text files a
     if (simulation) { simulation.stop(); simulation = null; }
     stageEmpty.hidden = false;
     stageCorner.hidden = true;
+    zoomControls.hidden = true;
     hideChrono();
   }
 
@@ -575,6 +581,7 @@ description: Build a similarity network in your browser — drop in text files a
     if (lastBuildSecs != null) parts.push('built in ' + lastBuildSecs + 's');
     statsEl.innerHTML = parts.map(function (p) { return '<span>' + escapeHtml(p) + '</span>'; }).join('');
     stageCorner.hidden = false;
+    zoomControls.hidden = false;
   }
 
   // Connected components over the current links (isolated nodes count as their
@@ -589,7 +596,7 @@ description: Build a similarity network in your browser — drop in text files a
   }
 
   // ── Live force graph (reuses the Network page's visual classes) ──
-  let svg, nodeSel, linkSel, labelSel, simulation, nodes;
+  let svg, zoomLayer, zoomBehavior, nodeSel, linkSel, labelSel, simulation, nodes;
   let labelsOn = false;
   let elevationOn = false;
   let lastContourAt = 0; // throttle: contourDensity is too heavy to run every tick
@@ -626,11 +633,21 @@ description: Build a similarity network in your browser — drop in text files a
 
     svg = d3.select('#net');
     svg.selectAll('*').remove();
-    svg.append('g').attr('class', 'contours'); // behind everything else
-    const linkLayer = svg.append('g').attr('class', 'links');
-    svg.append('g').attr('class', 'edge-labels'); // over the links, under node labels
-    const nodeLayer = svg.append('g').attr('class', 'nodes');
-    const labelLayer = svg.append('g').attr('class', 'labels'); // topmost, so node titles/hover sit over everything
+    // Everything lives inside one zoom layer so a single transform pans/zooms
+    // the whole graph — nodes, links, labels and contours together.
+    zoomLayer = svg.append('g').attr('class', 'zoom-layer');
+    zoomLayer.append('g').attr('class', 'contours'); // behind everything else
+    const linkLayer = zoomLayer.append('g').attr('class', 'links');
+    zoomLayer.append('g').attr('class', 'edge-labels'); // over the links, under node labels
+    const nodeLayer = zoomLayer.append('g').attr('class', 'nodes');
+    const labelLayer = zoomLayer.append('g').attr('class', 'labels'); // topmost, so node titles/hover sit over everything
+
+    // Wheel / pinch to zoom, drag the background to pan. Node drags stop event
+    // propagation before it reaches this, so grabbing a node never pans.
+    zoomBehavior = d3.zoom().scaleExtent([0.2, 8])
+      .on('zoom', function (e) { zoomLayer.attr('transform', e.transform); });
+    svg.call(zoomBehavior).on('dblclick.zoom', null);
+    svg.call(zoomBehavior.transform, d3.zoomIdentity); // reset on rebuild
 
     let links = buildLinks(+thresholdEl.value);
 
@@ -884,7 +901,7 @@ description: Build a similarity network in your browser — drop in text files a
       URL.revokeObjectURL(url);
       canvas.toBlob(function (blob) {
         if (!blob) { setStatus('Could not create the PNG.', true); return; }
-        downloadBlob(blob, 'similarity-network@' + scale + 'x.png');
+        downloadBlob(blob, 'affinity-network@' + scale + 'x.png');
       }, 'image/png');
     };
     img.onerror = function () { URL.revokeObjectURL(url); setStatus('Could not render the image for download.', true); };
@@ -895,7 +912,7 @@ description: Build a similarity network in your browser — drop in text files a
   function exportSVG() {
     if (!svg || !nodes) { setStatus('Build a network before downloading.', true); return; }
     const out = buildStandaloneSVG(1);
-    downloadBlob(new Blob([out.svgStr], { type: 'image/svg+xml;charset=utf-8' }), 'similarity-network.svg');
+    downloadBlob(new Blob([out.svgStr], { type: 'image/svg+xml;charset=utf-8' }), 'affinity-network.svg');
   }
 
   // Reheat the simulation so a force change takes visible effect.
@@ -1011,6 +1028,14 @@ description: Build a similarity network in your browser — drop in text files a
 
   // ── SVG (vector) export ──
   document.getElementById('export-svg').addEventListener('click', exportSVG);
+
+  // ── Zoom buttons: scale about the graph centre, matching wheel zoom ──
+  function zoomByFactor(k) {
+    if (!svg || !zoomBehavior) return;
+    svg.transition().duration(200).call(zoomBehavior.scaleBy, k);
+  }
+  document.getElementById('zoom-in').addEventListener('click', function () { zoomByFactor(1.3); });
+  document.getElementById('zoom-out').addEventListener('click', function () { zoomByFactor(1 / 1.3); });
 
   // ── Drop zone wiring ──
   ['dragenter', 'dragover'].forEach(function (ev) {

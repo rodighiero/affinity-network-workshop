@@ -67,8 +67,9 @@
 #network-view .lede ol li { margin-bottom: 0.35rem; }
 #network-view .lede ol li:last-child { margin-bottom: 0; }
 #network-view .lede code { font-family: inherit; color: var(--fg); }
-#network-view .stage { grid-column: 2 / -1; position: sticky; top: 1rem; overflow: hidden; height: calc(82vh - 9rem); min-height: 460px; }
-#network-view .stage svg { display: block; width: 100%; height: 100%; }
+#network-view .stage { grid-column: 2 / -1; position: sticky; top: 1rem; overflow: hidden; height: calc(82vh - 9rem); min-height: 460px; border: 1px solid var(--border); border-radius: 6px; }
+#network-view .stage svg { display: block; width: 100%; height: 100%; cursor: grab; }
+#network-view .stage svg:active { cursor: grabbing; }
 #network-view .node .hit { fill: transparent; cursor: pointer; }
 #network-view .node .marker {
   fill: var(--bg);
