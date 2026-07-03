@@ -42,8 +42,7 @@
   /* sidebar = 1 col, stage = 3 cols */
   grid-template-columns: 1fr 1fr 1fr 1fr;
   gap: 2rem;
-  height: calc(82vh - 9rem);
-  min-height: 460px;
+  align-items: start;
   margin-bottom: 2rem;
 }
 #network-view .sidebar {
@@ -68,7 +67,7 @@
 #network-view .lede ol li { margin-bottom: 0.35rem; }
 #network-view .lede ol li:last-child { margin-bottom: 0; }
 #network-view .lede code { font-family: inherit; color: var(--fg); }
-#network-view .stage { grid-column: 2 / -1; position: relative; overflow: hidden; }
+#network-view .stage { grid-column: 2 / -1; position: sticky; top: 1rem; overflow: hidden; height: calc(82vh - 9rem); min-height: 460px; }
 #network-view .stage svg { display: block; width: 100%; height: 100%; }
 #network-view .node .hit { fill: transparent; cursor: pointer; }
 #network-view .node .marker {
@@ -177,6 +176,6 @@
 
 /* On narrow screens stack the sidebar above the stage. */
 @media (max-width: 720px) {
-  #network-view { grid-template-columns: 1fr; height: auto; }
-  #network-view .stage { grid-column: 1; height: 70vh; min-height: 360px; }
+  #network-view { grid-template-columns: 1fr; }
+  #network-view .stage { grid-column: 1; position: relative; top: auto; height: 70vh; min-height: 360px; }
 }

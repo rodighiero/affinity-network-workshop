@@ -6,8 +6,6 @@
   font-size: var(--text-xs);
   line-height: var(--lh-normal);
   align-self: start;
-  max-height: calc(100vh - 9rem);
-  overflow-y: auto;
 }
 .studio-col .lede { color: var(--muted); margin: 0 0 1.2rem; }
 .col-head {
@@ -312,7 +310,7 @@ html.dark .studio-status.error { color: #ff7a6b; }
 .export-btn:hover { border-color: var(--fg); background: var(--border); }
 
 /* Loaded-file list */
-.file-list { list-style: none; padding: 0; margin: 0; max-height: 30vh; overflow-y: auto; }
+.file-list { list-style: none; padding: 0; margin: 0; }
 .file-list li {
   display: flex;
   flex-wrap: nowrap;
