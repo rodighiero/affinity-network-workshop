@@ -472,11 +472,28 @@ description: Build an affinity network in your browser — drop in text files an
 
   // ── Keywords (potential affinities, in the sense of Rodighiero, Kaplan &
   // Beaude 2018): the words most distinctive to each doc relative to the whole
-  // corpus. Plain regex tokens + TF-IDF, no lemmatiser and no stopword list, so
-  // it stays language-agnostic like the embedder — ubiquitous words fall out on
-  // their own because a term in every doc has zero inverse document frequency. ──
+  // corpus. Plain regex tokens + TF-IDF, no lemmatiser. IDF already sinks any
+  // word that appears in every doc (zero inverse document frequency), but common
+  // function words that show up in *most* — not all — docs (with, through, other,
+  // …) can still slip through, so we also drop an English stopword list. That
+  // gives up strict language-agnosticism, but the corpus is assumed English (as
+  // on the Text page), so cleaner keywords are the better trade. ──
   const TOKEN_RE = /[\p{L}][\p{L}\p{M}'’-]*/gu;
   const KW_PER_NODE = 8;
+
+  // Common English function words (3+ letters — shorter ones are dropped by the
+  // length filter below anyway) that carry no topical signal.
+  const STOPWORDS = new Set((
+    'the and for are but not you all any can had her was one our out has have ' +
+    'this that with from they will would there their what which when who whom ' +
+    'them than then now its also back after use two how other many most such ' +
+    'even more over under between been being does did doing each few both own ' +
+    'same very too off once here why those these while where because until ' +
+    'against during above below before again further should having itself ' +
+    'about into your some could only nor own than very just like into onto ' +
+    'upon per via yet still ever much away around across along near within ' +
+    'without toward towards among whose'
+  ).split(' '));
 
   function computeKeywords() {
     const n = docs.length;
@@ -488,7 +505,7 @@ description: Build an affinity network in your browser — drop in text files an
       let m;
       while ((m = TOKEN_RE.exec(text))) {
         const t = m[0];
-        if (t.length < 3) continue;
+        if (t.length < 3 || STOPWORDS.has(t)) continue;
         counts.set(t, (counts.get(t) || 0) + 1);
       }
       docTermCounts.push(counts);
