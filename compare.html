@@ -80,6 +80,11 @@ description: Compare two documents paragraph by paragraph — a similarity netwo
         </div>
       </div>
       <div class="studio-control slider-row">
+        <span class="sname" title="Base size of the paragraph markers. Each node's area already grows with the paragraph's length in words; this multiplies them all up or down together.">Node size</span>
+        <input type="range" id="node-size" min="0.4" max="3" step="0.1" value="1" aria-label="Node size">
+        <span class="val" id="node-size-val">1.0×</span>
+      </div>
+      <div class="studio-control slider-row">
         <span class="sname" title="Each paragraph links to its single closest neighbour within its own document and its single closest neighbour in the other document, but only if their similarity clears this value. Raise it and the network fragments; lower it and everything connects.">Threshold</span>
         <input type="range" id="threshold" min="0" max="0.95" step="0.01" value="0.80" aria-label="Connection threshold">
         <span class="val" id="threshold-val">0.80</span>
@@ -154,8 +159,20 @@ description: Compare two documents paragraph by paragraph — a similarity netwo
   const PREFIX = 'query: ';
 
   // Layout constants for the live force graph.
-  const NODE_RADIUS = 3.5;
   const DEFAULT_SIM = 0.80;
+
+  // Words in a paragraph (drives node size).
+  function wordCount(text) {
+    const m = String(text).trim().match(/\S+/g);
+    return m ? m.length : 0;
+  }
+
+  // Marker radius: area grows with the paragraph's word count (a sqrt keeps
+  // long paragraphs from swamping short ones), scaled by the "Node size" slider.
+  function nodeRadius(d) {
+    const scale = nodeSizeEl ? +nodeSizeEl.value : 1;
+    return (2 + Math.sqrt(d.words || 1) * 0.9) * scale;
+  }
 
   const d3 = window.d3;
   const statusEl = document.getElementById('status');
@@ -173,6 +190,8 @@ description: Compare two documents paragraph by paragraph — a similarity netwo
   const gravityVal = document.getElementById('gravity-val');
   const spacingEl = document.getElementById('spacing');
   const spacingVal = document.getElementById('spacing-val');
+  const nodeSizeEl = document.getElementById('node-size');
+  const nodeSizeVal = document.getElementById('node-size-val');
   const linkdistEl = document.getElementById('linkdist');
   const linkdistVal = document.getElementById('linkdist-val');
   const labelsToggle = document.getElementById('labels-toggle');
@@ -695,7 +714,7 @@ description: Compare two documents paragraph by paragraph — a similarity netwo
 
   function buildGraph() {
     const dim = stageDim();
-    nodes = paras.map(function (p, i) { return { i: i, name: p.name, doc: p.doc }; });
+    nodes = paras.map(function (p, i) { return { i: i, name: p.name, doc: p.doc, words: wordCount(p.text) }; });
 
     svg = d3.select('#net');
     svg.selectAll('*').remove();
@@ -717,9 +736,9 @@ description: Compare two documents paragraph by paragraph — a similarity netwo
 
     const nodeEnter = nodeLayer.selectAll('g.node').data(nodes).enter()
       .append('g').attr('class', function (d) { return 'node draggable node--' + d.doc.toLowerCase(); });
-    nodeEnter.append('circle').attr('class', 'hit').attr('r', 12);
-    nodeEnter.append('circle').attr('class', 'marker').attr('r', NODE_RADIUS);
-    nodeEnter.append('circle').attr('class', 'ring').attr('r', NODE_RADIUS + 2);
+    nodeEnter.append('circle').attr('class', 'hit').attr('r', function (d) { return Math.max(12, nodeRadius(d) + 8); });
+    nodeEnter.append('circle').attr('class', 'marker').attr('r', nodeRadius);
+    nodeEnter.append('circle').attr('class', 'ring').attr('r', function (d) { return nodeRadius(d) + 2; });
     nodeSel = nodeEnter;
 
     nodeSel
@@ -738,7 +757,7 @@ description: Compare two documents paragraph by paragraph — a similarity netwo
       .force('center', d3.forceCenter(dim.w / 2, dim.h / 2))
       .force('x', d3.forceX(dim.w / 2).strength(+gravityEl.value))
       .force('y', d3.forceY(dim.h / 2).strength(+gravityEl.value))
-      .force('collide', d3.forceCollide().radius(NODE_RADIUS + (+spacingEl.value)))
+      .force('collide', d3.forceCollide().radius(function (d) { return nodeRadius(d) + (+spacingEl.value); }))
       .on('tick', ticked)
       .on('end', function () { if (elevationOn) drawContours(); });
 
@@ -784,6 +803,19 @@ description: Compare two documents paragraph by paragraph — a similarity netwo
   function applyLabels() {
     if (!labelSel || !nodes) return;
     nodes.forEach(function (n) { setLabel(n.i, labelsOn ? displayName(n.name) : ''); });
+  }
+
+  // Resize every marker (and its hover/collision radius) to the current
+  // "Node size" scale, then reheat so the collision spacing settles.
+  function applyNodeSize() {
+    if (!nodeSel) return;
+    nodeSel.select('.marker').attr('r', nodeRadius);
+    nodeSel.select('.ring').attr('r', function (d) { return nodeRadius(d) + 2; });
+    nodeSel.select('.hit').attr('r', function (d) { return Math.max(12, nodeRadius(d) + 8); });
+    if (simulation) {
+      simulation.force('collide').radius(function (d) { return nodeRadius(d) + (+spacingEl.value); });
+      nudge();
+    }
   }
 
   // Stable key for a link, whether its endpoints are still indices or node objects.
@@ -936,8 +968,14 @@ description: Compare two documents paragraph by paragraph — a similarity netwo
 
   spacingEl.addEventListener('input', function () {
     spacingVal.textContent = spacingEl.value;
-    if (simulation) simulation.force('collide').radius(NODE_RADIUS + (+spacingEl.value));
+    if (simulation) simulation.force('collide').radius(function (d) { return nodeRadius(d) + (+spacingEl.value); });
     nudge();
+  });
+
+  // ── Node size: rescale every marker and its collision radius ──
+  nodeSizeEl.addEventListener('input', function () {
+    nodeSizeVal.textContent = (+nodeSizeEl.value).toFixed(1) + '×';
+    applyNodeSize();
   });
 
   linkdistEl.addEventListener('input', function () {
