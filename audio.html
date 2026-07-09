@@ -43,11 +43,28 @@ description: Drop in short audio clips and watch them arrange by how they sound 
     <div class="studio-controls" id="controls" hidden>
       <p class="controls-head">Tuning</p>
       <label class="studio-control switch-row">
+        <span class="switch-label" title="Place each clip at its position in a faithful projection of the embedding (classical MDS over the vectors), so distance on screen reflects real sonic similarity — instead of the force-directed network. The force-only sliders below have no effect in this view.">Embedding layout</span>
+        <input type="checkbox" id="embed-toggle" class="switch-input">
+        <span class="switch" aria-hidden="true"></span>
+      </label>
+      <div class="control-sub" id="embed-sub" hidden>
+        <div class="studio-control slider-row">
+          <span class="sname" title="How many dimensions to project onto. 1D lays the clips along a single axis (their strongest axis of variation); 2D spreads them across the plane.">Dimensions</span>
+          <input type="range" id="embed-dims" min="1" max="2" step="1" value="2" aria-label="Embedding dimensions">
+          <span class="val" id="embed-dims-val">2D</span>
+        </div>
+      </div>
+      <label class="studio-control switch-row">
         <span class="switch-label">Node labels</span>
         <input type="checkbox" id="labels-toggle" class="switch-input">
         <span class="switch" aria-hidden="true"></span>
       </label>
       <div class="control-sub" id="labels-sub" hidden>
+        <div class="studio-control slider-row">
+          <span class="sname" title="Trim long clip names to this many characters, breaking on a word boundary where possible. At the maximum, names are shown in full.">Label length</span>
+          <input type="range" id="title-len" min="8" max="40" step="1" value="40" aria-label="Label length">
+          <span class="val" id="title-len-val">Full</span>
+        </div>
         <div class="studio-control slider-row">
           <span class="sname" title="Font size of the node labels.">Label size</span>
           <input type="range" id="label-size" min="8" max="24" step="1" value="12" aria-label="Label font size">
@@ -151,8 +168,14 @@ description: Drop in short audio clips and watch them arrange by how they sound 
   const spacingVal = document.getElementById('spacing-val');
   const linkdistEl = document.getElementById('linkdist');
   const linkdistVal = document.getElementById('linkdist-val');
+  const embedToggle = document.getElementById('embed-toggle');
+  const embedSub = document.getElementById('embed-sub');
+  const embedDimsEl = document.getElementById('embed-dims');
+  const embedDimsVal = document.getElementById('embed-dims-val');
   const labelsToggle = document.getElementById('labels-toggle');
   const labelsSub = document.getElementById('labels-sub');
+  const titleLenEl = document.getElementById('title-len');
+  const titleLenVal = document.getElementById('title-len-val');
   const labelSizeEl = document.getElementById('label-size');
   const labelSizeVal = document.getElementById('label-size-val');
   const elevationToggle = document.getElementById('elevation-toggle');
@@ -549,6 +572,76 @@ description: Drop in short audio clips and watch them arrange by how they sound 
     }
   }
 
+  // ── 2D projection (classical MDS / PCA) ──
+  // Project the N normalized embedding vectors down to 2D so that on-screen
+  // distance reflects real embedding distance. Classical MDS on centred vectors
+  // ≡ PCA scores: build the N×N Gram matrix of the centred data, take its top
+  // two eigenvectors (via power iteration + deflation), and scale each by the
+  // square root of its eigenvalue. Deterministic and dependency-free; N is
+  // small so the whole thing is cheap. Returns raw {x,y} coords (unfitted).
+  function computeProjection() {
+    const n = vectors.length;
+    if (n < 2) return vectors.map(function () { return { x: 0, y: 0 }; });
+    const dim = vectors[0].length;
+    // Mean-centre the vectors.
+    const mean = new Float64Array(dim);
+    for (let i = 0; i < n; i++) { const v = vectors[i]; for (let k = 0; k < dim; k++) mean[k] += v[k]; }
+    for (let k = 0; k < dim; k++) mean[k] /= n;
+    const Xc = [];
+    for (let i = 0; i < n; i++) {
+      const v = vectors[i], row = new Float64Array(dim);
+      for (let k = 0; k < dim; k++) row[k] = v[k] - mean[k];
+      Xc.push(row);
+    }
+    // Gram matrix G = Xc·Xcᵀ (N×N, symmetric PSD).
+    const G = [];
+    for (let i = 0; i < n; i++) {
+      G[i] = new Float64Array(n);
+      for (let j = 0; j <= i; j++) {
+        let s = 0; const a = Xc[i], b = Xc[j];
+        for (let k = 0; k < dim; k++) s += a[k] * b[k];
+        G[i][j] = s; G[j][i] = s;
+      }
+    }
+    const e1 = topEigen(G, n, null);
+    const e2 = topEigen(G, n, e1); // deflate against the first
+    const sx = Math.sqrt(Math.max(e1.val, 0));
+    const sy = Math.sqrt(Math.max(e2.val, 0));
+    const out = [];
+    for (let i = 0; i < n; i++) out.push({ x: e1.vec[i] * sx, y: e2.vec[i] * sy });
+    return out;
+  }
+
+  // Largest eigenpair of a symmetric matrix by power iteration. If `deflate` is
+  // given (a previous eigenpair), its component is projected out each step so we
+  // converge to the next one.
+  function topEigen(M, n, deflate) {
+    let v = new Float64Array(n);
+    for (let i = 0; i < n; i++) v[i] = Math.sin(i * 12.9898 + 1) * 43758.5453 % 1 || 0.1; // deterministic seed
+    function project(w) {
+      if (!deflate) return;
+      let d = 0; for (let i = 0; i < n; i++) d += w[i] * deflate.vec[i];
+      for (let i = 0; i < n; i++) w[i] -= d * deflate.vec[i];
+    }
+    function normalize(w) { let s = 0; for (let i = 0; i < n; i++) s += w[i] * w[i]; s = Math.sqrt(s) || 1; for (let i = 0; i < n; i++) w[i] /= s; return s; }
+    project(v); normalize(v);
+    let val = 0;
+    for (let it = 0; it < 256; it++) {
+      const w = new Float64Array(n);
+      for (let i = 0; i < n; i++) { let s = 0; const Mi = M[i]; for (let j = 0; j < n; j++) s += Mi[j] * v[j]; w[i] = s; }
+      project(w);
+      const len = normalize(w);
+      let dot = 0; for (let i = 0; i < n; i++) dot += w[i] * v[i];
+      v = w; val = len;
+      if (Math.abs(Math.abs(dot) - 1) < 1e-10) break;
+    }
+    // Rayleigh quotient for a clean eigenvalue.
+    const Mv = new Float64Array(n);
+    for (let i = 0; i < n; i++) { let s = 0; const Mi = M[i]; for (let j = 0; j < n; j++) s += Mi[j] * v[j]; Mv[i] = s; }
+    let ray = 0; for (let i = 0; i < n; i++) ray += v[i] * Mv[i];
+    return { vec: v, val: ray };
+  }
+
   // Each node links to its single strongest neighbour, if it clears the threshold.
   function buildLinks(threshold) {
     const n = clips.length;
@@ -653,8 +746,23 @@ description: Drop in short audio clips and watch them arrange by how they sound 
   let labelsOn = false;
   let elevationOn = false;
   let lastContourAt = 0; // throttle: contourDensity is too heavy to run every tick
+  let layoutMode = 'force'; // 'force' | 'embedding'
+  let projection = null;    // cached raw 2D coords from computeProjection()
 
-  function displayName(name) { return name; }
+  // Trim a long clip name to `max` characters, breaking on a word boundary
+  // where one exists (filenames often use _ or - separators, so fall back to a
+  // hard cut and strip any trailing separator).
+  function shortenTitle(name, max) {
+    if (name.length <= max) return name;
+    const cut = name.slice(0, max);
+    const sp = cut.lastIndexOf(' ');
+    return (sp > 8 ? cut.slice(0, sp) : cut).replace(/[\s_—–-]+$/, '') + '…';
+  }
+  // The "Label length" slider sets the cap; at its maximum, names are full.
+  function displayName(name) {
+    const max = +titleLenEl.value;
+    return max >= +titleLenEl.max ? name : shortenTitle(name, max);
+  }
 
   function stageDim() {
     const stage = document.querySelector('#network-view .stage');
@@ -669,6 +777,7 @@ description: Drop in short audio clips and watch them arrange by how they sound 
 
   function buildGraph() {
     const dim = stageDim();
+    projection = null; // fresh vectors → recompute the projection lazily
     nodes = clips.map(function (d, i) { return { i: i, name: d.name }; });
 
     svg = d3.select('#net');
@@ -706,7 +815,7 @@ description: Drop in short audio clips and watch them arrange by how they sound 
       .call(d3.drag()
         .on('start', function (e, d) { d.__x0 = e.x; d.__y0 = e.y; d.__moved = false; if (!e.active) simulation.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; d3.select(this).classed('dragging', true); })
         .on('drag', function (e, d) { if (Math.hypot(e.x - d.__x0, e.y - d.__y0) > 3) d.__moved = true; d.fx = e.x; d.fy = e.y; })
-        .on('end', function (e, d) { if (!e.active) simulation.alphaTarget(0); d.fx = null; d.fy = null; d3.select(this).classed('dragging', false); if (!d.__moved) playClip(d); }));
+        .on('end', function (e, d) { if (!e.active) simulation.alphaTarget(0); if (layoutMode === 'force') { d.fx = null; d.fy = null; } d3.select(this).classed('dragging', false); if (!d.__moved) playClip(d); }));
 
     simulation = d3.forceSimulation(nodes)
       .force('link', d3.forceLink(links).id(function (d) { return d.i; })
@@ -725,6 +834,10 @@ description: Drop in short audio clips and watch them arrange by how they sound 
     applyLabels();
     applyFontSizes();
     drawContours();
+
+    // Honour the layout toggle (e.g. left on across a rebuild).
+    setForceControlsEnabled(layoutMode === 'force');
+    if (layoutMode === 'embedding') applyEmbedding();
   }
 
   // ── Elevation map: topographic density contours over the node positions. ──
@@ -781,16 +894,76 @@ description: Drop in short audio clips and watch them arrange by how they sound 
     linkSel = linkSel.enter().append('line').attr('class', 'link').merge(linkSel);
   }
 
-  function ticked() {
+  // Sync the drawn links/nodes/labels to the current node x/y. Used both by the
+  // force tick and by the (static) 2D-embedding layout.
+  function refreshPositions() {
     if (linkSel) linkSel
       .attr('x1', function (d) { return d.source.x; }).attr('y1', function (d) { return d.source.y; })
       .attr('x2', function (d) { return d.target.x; }).attr('y2', function (d) { return d.target.y; });
-    nodeSel.attr('transform', function (d) { return 'translate(' + d.x + ',' + d.y + ')'; });
-    labelSel.attr('transform', function (d) { return 'translate(' + d.x + ',' + d.y + ')'; });
+    if (nodeSel) nodeSel.attr('transform', function (d) { return 'translate(' + d.x + ',' + d.y + ')'; });
+    if (labelSel) labelSel.attr('transform', function (d) { return 'translate(' + d.x + ',' + d.y + ')'; });
+  }
+
+  function ticked() {
+    refreshPositions();
     if (elevationOn) {
       const now = performance.now();
       if (now - lastContourAt > 90) { lastContourAt = now; drawContours(); }
     }
+  }
+
+  // ── Layout modes ──
+  // Switch the graph between the force simulation and the static 2D embedding.
+  function applyLayout() {
+    if (!nodes) return;
+    if (layoutMode === 'embedding') applyEmbedding();
+    else applyForce();
+  }
+
+  // Pin every node at its position in the fitted projection and stop the
+  // simulation. Links stay drawn; distance on screen now reflects the embedding.
+  // In 1D the nodes sit on a single horizontal axis (their first principal
+  // component); in 2D they spread across the plane.
+  function applyEmbedding() {
+    if (!nodes || !vectors.length) return;
+    if (!projection) projection = computeProjection();
+    const twoD = +embedDimsEl.value === 2;
+    const dim = stageDim();
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    projection.forEach(function (p) {
+      if (p.x < minX) minX = p.x; if (p.x > maxX) maxX = p.x;
+      if (p.y < minY) minY = p.y; if (p.y > maxY) maxY = p.y;
+    });
+    const pad = 44;
+    const rx = (maxX - minX) || 1, ry = (maxY - minY) || 1;
+    const scale = twoD
+      ? Math.min((dim.w - 2 * pad) / rx, (dim.h - 2 * pad) / ry)
+      : (dim.w - 2 * pad) / rx;
+    const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
+    nodes.forEach(function (nd, i) {
+      const p = projection[i];
+      nd.x = nd.fx = dim.w / 2 + (p.x - cx) * scale;
+      nd.y = nd.fy = twoD ? dim.h / 2 - (p.y - cy) * scale : dim.h / 2; // 1D: flat axis
+    });
+    if (simulation) simulation.stop();
+    refreshPositions();
+    if (elevationOn) drawContours();
+  }
+
+  // Release the pinned positions and let the force simulation take back over.
+  function applyForce() {
+    if (!nodes) return;
+    nodes.forEach(function (nd) { nd.fx = null; nd.fy = null; });
+    if (simulation) simulation.alpha(0.6).restart();
+  }
+
+  // Force-only sliders have no effect in the embedding view; grey them out.
+  function setForceControlsEnabled(on) {
+    [chargeEl, gravityEl, spacingEl, linkdistEl].forEach(function (el) {
+      el.disabled = !on;
+      const row = el.closest('.slider-row');
+      if (row) row.classList.toggle('disabled', !on);
+    });
   }
 
   function setLabel(i, name) {
@@ -894,8 +1067,23 @@ description: Drop in short audio clips and watch them arrange by how they sound 
     const links = buildLinks(+thresholdEl.value);
     simulation.force('link').links(links);
     drawLinks(links);
-    simulation.alpha(0.6).restart();
+    if (layoutMode === 'force') simulation.alpha(0.6).restart();
+    else refreshPositions(); // pinned layout: just re-draw the new edges
     renderStats();
+  });
+
+  // ── Layout: force network ⇄ embedding projection ──
+  embedToggle.addEventListener('change', function () {
+    layoutMode = embedToggle.checked ? 'embedding' : 'force';
+    embedSub.hidden = !embedToggle.checked;
+    setForceControlsEnabled(layoutMode === 'force');
+    applyLayout();
+  });
+
+  // ── Embedding dimensions: 1D (single axis) ⇄ 2D (plane) ──
+  embedDimsEl.addEventListener('input', function () {
+    embedDimsVal.textContent = (+embedDimsEl.value) + 'D';
+    if (layoutMode === 'embedding') applyEmbedding();
   });
 
   // ── Repulsion: charge strength ──
@@ -933,6 +1121,13 @@ description: Drop in short audio clips and watch them arrange by how they sound 
   labelsToggle.addEventListener('change', function () {
     labelsOn = labelsToggle.checked;
     labelsSub.hidden = !labelsOn;
+    applyLabels();
+  });
+
+  // ── Label length: cap label characters (or full at the maximum) ──
+  titleLenEl.addEventListener('input', function () {
+    const max = +titleLenEl.value;
+    titleLenVal.textContent = max >= +titleLenEl.max ? 'Full' : max;
     applyLabels();
   });
 
@@ -997,6 +1192,7 @@ description: Drop in short audio clips and watch them arrange by how they sound 
     clearTimeout(resizeTimer);
     resizeTimer = setTimeout(function () {
       if (!simulation) return;
+      if (layoutMode === 'embedding') { applyEmbedding(); return; } // re-fit projection
       const dim = stageDim();
       simulation.force('center', d3.forceCenter(dim.w / 2, dim.h / 2));
       simulation.force('x').x(dim.w / 2);

@@ -31,3 +31,10 @@ html.dark #network-view {
 #network-view .file-list li > span:last-child {
   font-variant-numeric: tabular-nums;
 }
+
+/* Force-only sliders are inert in the 2D-embedding view — dim them so it's
+   clear they don't apply. */
+#network-view .slider-row.disabled {
+  opacity: 0.4;
+  pointer-events: none;
+}
