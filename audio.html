@@ -1,0 +1,1007 @@
+---
+layout: default
+title: Audio
+permalink: /audio/
+styles: [network.css, studio.css, audio.css]
+description: Drop in short audio clips and watch them arrange by how they sound — embedding, similarity, and layout, live in your browser. Nothing is uploaded.
+---
+<header class="page-head">
+  <p>A third instrument, alongside the <a href="{{ '/text/' | relative_url }}">Text</a> microscope and the <a href="{{ '/network/' | relative_url }}">Network</a> telescope: drop in <strong>a set of short audio clips</strong> and watch them arrange by how they <em>sound</em> — embedding, similarity, and layout. Everything runs live in your browser; nothing is uploaded.</p>
+</header>
+
+<div id="network-view" class="studio-view">
+  <div class="studio-col studio-col--upload">
+    <h2 class="col-head">1 · Add clips</h2>
+    <p class="lede">Each clip becomes a node, placed near the clips it most resembles. Drop <code>.wav</code> or <code>.mp3</code> files — short ones (a few seconds) work best. Click a node to hear it.</p>
+
+    <label class="dropzone" id="dropzone">
+      <svg class="dz-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+        <path d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <span id="dropzone-label"><strong>Drop audio files here</strong><span class="dz-sub">or click to choose · .wav .mp3 .ogg .m4a</span></span>
+      <input type="file" id="file-input" accept=".wav,.mp3,.ogg,.flac,.m4a,.aac,audio/*" multiple>
+    </label>
+
+    <p class="dz-alt">No files handy? <button type="button" class="linkish" id="sample-btn">Load a sample set</button></p>
+
+    <div class="file-block" id="file-block" hidden>
+      <div class="file-list-head">
+        <span id="file-count">0 clips</span>
+        <button type="button" class="linkish" id="clear-btn">Clear</button>
+      </div>
+      <ul class="file-list" id="file-list"></ul>
+    </div>
+  </div>
+
+  <div class="studio-col studio-col--build">
+    <h2 class="col-head">2 · Build &amp; tune</h2>
+    <button type="button" class="studio-build" id="build-btn" disabled>Build network</button>
+
+    <p class="studio-status" id="status" aria-live="polite"></p>
+
+    <div class="studio-controls" id="controls" hidden>
+      <p class="controls-head">Tuning</p>
+      <label class="studio-control switch-row">
+        <span class="switch-label">Node labels</span>
+        <input type="checkbox" id="labels-toggle" class="switch-input">
+        <span class="switch" aria-hidden="true"></span>
+      </label>
+      <div class="control-sub" id="labels-sub" hidden>
+        <div class="studio-control slider-row">
+          <span class="sname" title="Font size of the node labels.">Label size</span>
+          <input type="range" id="label-size" min="8" max="24" step="1" value="12" aria-label="Label font size">
+          <span class="val" id="label-size-val">12</span>
+        </div>
+      </div>
+      <label class="studio-control switch-row">
+        <span class="switch-label" title="Draw density contours behind the graph, so clusters of similar clips rise like high ground on a topographic map.">Elevation map</span>
+        <input type="checkbox" id="elevation-toggle" class="switch-input">
+        <span class="switch" aria-hidden="true"></span>
+      </label>
+      <div class="control-sub" id="elevation-sub" hidden>
+        <div class="studio-control slider-row">
+          <span class="sname" title="How much the density is blurred before contours are drawn. Higher makes broad smooth hills; lower hugs the individual nodes into tighter, noisier lines.">Smoothing</span>
+          <input type="range" id="elev-bandwidth" min="8" max="60" step="1" value="30" aria-label="Elevation smoothing">
+          <span class="val" id="elev-bandwidth-val">30</span>
+        </div>
+        <div class="studio-control slider-row">
+          <span class="sname" title="How many contour lines to draw between the lowest and highest density. More lines pack the slopes with detail; fewer show only the main peaks.">Levels</span>
+          <input type="range" id="elev-levels" min="4" max="30" step="1" value="14" aria-label="Elevation levels">
+          <span class="val" id="elev-levels-val">14</span>
+        </div>
+      </div>
+      <div class="studio-control slider-row">
+        <span class="sname" title="Each node links to its single closest clip, but only if their similarity clears this value. Raise it and the network fragments; lower it and everything connects.">Threshold</span>
+        <input type="range" id="threshold" min="0" max="0.95" step="0.01" value="0.70" aria-label="Connection threshold">
+        <span class="val" id="threshold-val">0.70</span>
+      </div>
+      <div class="studio-control slider-row">
+        <span class="sname" title="How hard nodes push apart. Higher spreads the whole network out; lower lets clusters pull together.">Repulsion</span>
+        <input type="range" id="charge" min="40" max="600" step="10" value="280" aria-label="Repulsion">
+        <span class="val" id="charge-val">280</span>
+      </div>
+      <div class="studio-control slider-row">
+        <span class="sname" title="Pull toward the centre. Higher gathers the whole network into a tighter ball; zero lets it drift apart and fill the space.">Gravity</span>
+        <input type="range" id="gravity" min="0" max="0.3" step="0.01" value="0.05" aria-label="Gravity">
+        <span class="val" id="gravity-val">0.05</span>
+      </div>
+      <div class="studio-control slider-row">
+        <span class="sname" title="Minimum breathing room kept around each node, so markers and labels don't overlap.">Spacing</span>
+        <input type="range" id="spacing" min="4" max="60" step="1" value="24" aria-label="Node spacing">
+        <span class="val" id="spacing-val">24</span>
+      </div>
+      <div class="studio-control slider-row">
+        <span class="sname" title="Resting length of the edges. Longer edges stretch connected clips further apart.">Link distance</span>
+        <input type="range" id="linkdist" min="5" max="100" step="1" value="15" aria-label="Link distance">
+        <span class="val" id="linkdist-val">15</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="stage">
+    <p class="stage-empty" id="stage-empty">Your affinity network will appear here.<br><span>Add clips or load the sample set, then build.</span></p>
+    <div class="stage-corner" id="stage-corner" hidden>
+      <div class="export-overlay">
+        <span class="export-label">Download</span>
+        <button type="button" class="export-btn" data-scale="4" title="Download a 4× PNG">PNG</button>
+        <button type="button" class="export-btn" id="export-svg" title="Download a resolution-independent vector SVG">SVG</button>
+      </div>
+      <div class="stats-overlay" id="stats" aria-live="polite"></div>
+    </div>
+    <svg id="net" aria-label="Live affinity network"></svg>
+    <div class="zoom-controls" id="zoom-controls" hidden>
+      <button type="button" class="zoom-btn" id="zoom-in" aria-label="Zoom in" title="Zoom in">+</button>
+      <button type="button" class="zoom-btn" id="zoom-out" aria-label="Zoom out" title="Zoom out">−</button>
+    </div>
+  </div>
+</div>
+
+<script src="{{ '/js/d3.v7.min.js' | relative_url }}"></script>
+<script type="module">
+  import { AutoProcessor, ClapAudioModelWithProjection, env }
+    from 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3';
+
+  // Fetch models from the Hugging Face hub (we don't vendor them).
+  env.allowLocalModels = false;
+
+  // CLAP audio encoder: turns a raw waveform into a fixed 512-dim embedding
+  // designed for cross-clip similarity — the audio analogue of the Network
+  // page's text embedder. We only load the (small, quantized) audio tower.
+  const MODEL = 'Xenova/clap-htsat-unfused';
+  const TARGET_RATE = 48000; // CLAP expects 48 kHz mono
+
+  // Layout constants for the live force graph.
+  const NODE_RADIUS = 3;
+  const DEFAULT_SIM = 0.70;
+
+  const d3 = window.d3;
+  const statusEl = document.getElementById('status');
+  const dropzone = document.getElementById('dropzone');
+  const fileInput = document.getElementById('file-input');
+  const fileListEl = document.getElementById('file-list');
+  const controlsEl = document.getElementById('controls');
+  const thresholdEl = document.getElementById('threshold');
+  const thresholdVal = document.getElementById('threshold-val');
+  const chargeEl = document.getElementById('charge');
+  const chargeVal = document.getElementById('charge-val');
+  const gravityEl = document.getElementById('gravity');
+  const gravityVal = document.getElementById('gravity-val');
+  const spacingEl = document.getElementById('spacing');
+  const spacingVal = document.getElementById('spacing-val');
+  const linkdistEl = document.getElementById('linkdist');
+  const linkdistVal = document.getElementById('linkdist-val');
+  const labelsToggle = document.getElementById('labels-toggle');
+  const labelsSub = document.getElementById('labels-sub');
+  const labelSizeEl = document.getElementById('label-size');
+  const labelSizeVal = document.getElementById('label-size-val');
+  const elevationToggle = document.getElementById('elevation-toggle');
+  const elevationSub = document.getElementById('elevation-sub');
+  const elevBandwidthEl = document.getElementById('elev-bandwidth');
+  const elevBandwidthVal = document.getElementById('elev-bandwidth-val');
+  const elevLevelsEl = document.getElementById('elev-levels');
+  const elevLevelsVal = document.getElementById('elev-levels-val');
+  const buildBtn = document.getElementById('build-btn');
+  const sampleBtn = document.getElementById('sample-btn');
+  const clearBtn = document.getElementById('clear-btn');
+  const fileBlock = document.getElementById('file-block');
+  const fileCountEl = document.getElementById('file-count');
+  const stageEmpty = document.getElementById('stage-empty');
+  const statsEl = document.getElementById('stats');
+  const stageCorner = document.getElementById('stage-corner');
+  const zoomControls = document.getElementById('zoom-controls');
+
+  // ── Synthesized sample set ──
+  // A built-in corpus so the page is usable without your own files. Rather than
+  // ship binary audio, we generate short clips in five loose families — pure
+  // tones, chords, noise, rhythmic pulses, and gliding sweeps — so the sonic
+  // clustering is easy to see (and easy to hear). Each spec is turned into a
+  // Float32Array waveform on the fly by makeSampleClips() below.
+  const SAMPLE_SPECS = [
+    // Pure tones at rising pitches (a single sine each).
+    { name: 'tone-low',    dur: 2.0, kind: 'tone',  freqs: [220] },
+    { name: 'tone-mid',    dur: 2.0, kind: 'tone',  freqs: [330] },
+    { name: 'tone-a440',   dur: 2.0, kind: 'tone',  freqs: [440] },
+    { name: 'tone-high',   dur: 2.0, kind: 'tone',  freqs: [660] },
+    // Chords (stacked sines = major triads).
+    { name: 'chord-a',     dur: 2.0, kind: 'tone',  freqs: [220, 277, 330] },
+    { name: 'chord-c',     dur: 2.0, kind: 'tone',  freqs: [262, 330, 392] },
+    { name: 'chord-e',     dur: 2.0, kind: 'tone',  freqs: [330, 415, 494] },
+    // Noise textures.
+    { name: 'noise-white', dur: 2.0, kind: 'noise', tilt: 0 },
+    { name: 'noise-soft',  dur: 2.0, kind: 'noise', tilt: 1 },
+    { name: 'noise-rough', dur: 2.0, kind: 'noise', tilt: 0.4 },
+    // Rhythmic pulses (a tone gated on and off at a beat rate).
+    { name: 'pulse-slow',  dur: 2.0, kind: 'pulse', freqs: [330], rate: 3 },
+    { name: 'pulse-med',   dur: 2.0, kind: 'pulse', freqs: [440], rate: 6 },
+    { name: 'pulse-fast',  dur: 2.0, kind: 'pulse', freqs: [440], rate: 10 },
+    // Gliding sweeps (frequency ramps up or down).
+    { name: 'sweep-up',    dur: 2.0, kind: 'sweep', from: 220, to: 880 },
+    { name: 'sweep-down',  dur: 2.0, kind: 'sweep', from: 880, to: 220 },
+    { name: 'sweep-wide',  dur: 2.0, kind: 'sweep', from: 150, to: 1200 }
+  ];
+
+  const TWO_PI = Math.PI * 2;
+
+  // Compute a mono waveform (Float32Array @ TARGET_RATE) for one sample spec.
+  function synthClip(spec) {
+    const rate = TARGET_RATE;
+    const n = Math.floor(spec.dur * rate);
+    const pcm = new Float32Array(n);
+    if (spec.kind === 'tone' || spec.kind === 'pulse') {
+      const fs = spec.freqs;
+      for (let i = 0; i < n; i++) {
+        const t = i / rate;
+        let s = 0;
+        for (let k = 0; k < fs.length; k++) s += Math.sin(TWO_PI * fs[k] * t);
+        s = s / fs.length * 0.6;
+        if (spec.kind === 'pulse') {
+          // Square gate at the beat rate: on for the first half of each beat.
+          const phase = (t * spec.rate) % 1;
+          if (phase > 0.5) s = 0;
+        }
+        pcm[i] = s;
+      }
+    } else if (spec.kind === 'sweep') {
+      // Linear frequency ramp; integrate to keep phase continuous.
+      const f0 = spec.from, f1 = spec.to, dur = spec.dur;
+      for (let i = 0; i < n; i++) {
+        const t = i / rate;
+        const phase = TWO_PI * (f0 * t + (f1 - f0) * t * t / (2 * dur));
+        pcm[i] = Math.sin(phase) * 0.6;
+      }
+    } else { // noise
+      let last = 0;
+      const tilt = spec.tilt || 0; // 0 = white, →1 = smoother/darker
+      for (let i = 0; i < n; i++) {
+        const white = Math.random() * 2 - 1;
+        last = tilt ? last * tilt + white * (1 - tilt) : white;
+        pcm[i] = last * 0.5;
+      }
+    }
+    // 10 ms fade in/out so clips don't click.
+    const f = Math.min(Math.floor(0.01 * rate), Math.floor(n / 2));
+    for (let i = 0; i < f; i++) { const g = i / f; pcm[i] *= g; pcm[n - 1 - i] *= g; }
+    return pcm;
+  }
+
+  // Encode a mono Float32Array as a 16-bit PCM WAV Blob (for click-to-play).
+  function encodeWAV(pcm, rate) {
+    const n = pcm.length;
+    const buf = new ArrayBuffer(44 + n * 2);
+    const view = new DataView(buf);
+    function ws(off, s) { for (let i = 0; i < s.length; i++) view.setUint8(off + i, s.charCodeAt(i)); }
+    ws(0, 'RIFF'); view.setUint32(4, 36 + n * 2, true); ws(8, 'WAVE');
+    ws(12, 'fmt '); view.setUint32(16, 16, true); view.setUint16(20, 1, true); view.setUint16(22, 1, true);
+    view.setUint32(24, rate, true); view.setUint32(28, rate * 2, true); view.setUint16(32, 2, true); view.setUint16(34, 16, true);
+    ws(36, 'data'); view.setUint32(40, n * 2, true);
+    let off = 44;
+    for (let i = 0; i < n; i++) {
+      const s = Math.max(-1, Math.min(1, pcm[i]));
+      view.setInt16(off, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+      off += 2;
+    }
+    return new Blob([view], { type: 'audio/wav' });
+  }
+
+  // Turn the sample specs into staged clips (same shape as dropped files).
+  function makeSampleClips() {
+    return SAMPLE_SPECS.map(function (spec) {
+      const pcm = synthClip(spec);
+      return {
+        name: spec.name,
+        url: URL.createObjectURL(encodeWAV(pcm, TARGET_RATE)),
+        pcm: pcm,
+        duration: pcm.length / TARGET_RATE
+      };
+    });
+  }
+
+  function setStatus(msg, isError) {
+    statusEl.textContent = msg || '';
+    statusEl.classList.toggle('error', !!isError);
+  }
+
+  // Yield to the browser so a status update actually paints before the next
+  // (synchronous) stage runs.
+  function paint() {
+    return new Promise(function (r) { requestAnimationFrame(function () { requestAnimationFrame(r); }); });
+  }
+
+  // ── Chrono: time a build; the result shows as "built in Ns" in the stats
+  // panel over the graph. ──
+  let chronoStart = 0;
+  let lastBuildSecs = null;
+
+  function startChrono() {
+    chronoStart = performance.now();
+    lastBuildSecs = null;
+  }
+
+  function stopChrono(ok) {
+    if (!ok) return;
+    lastBuildSecs = ((performance.now() - chronoStart) / 1000).toFixed(1);
+    renderStats();
+  }
+
+  function hideChrono() { lastBuildSecs = null; }
+
+  // ── State ──
+  let clips = [];       // { name, url, pcm, duration }
+  let vectors = [];     // Float32Array(512) per clip (normalized)
+  let sim = [];         // sim[i][j]
+  let processor = null;
+  let audioModel = null;
+  let embedderPromise = null;
+  let busy = false;
+
+  // Start downloading/initialising the CLAP model. Safe to call repeatedly: the
+  // first call kicks it off, later calls return the same promise. Staging files
+  // calls this so the (~34 MB) load overlaps with the user reviewing their clips.
+  function warmModel() {
+    if (!embedderPromise) {
+      const progress_callback = function (p) {
+        if (busy && p && p.status === 'progress' && typeof p.progress === 'number') {
+          setStatus('Downloading the model (one-time, ~34 MB)… ' + Math.round(p.progress) + '%');
+        }
+      };
+      embedderPromise = Promise.all([
+        AutoProcessor.from_pretrained(MODEL, { progress_callback: progress_callback }),
+        ClapAudioModelWithProjection.from_pretrained(MODEL, { dtype: 'q8', progress_callback: progress_callback })
+      ]).then(function (parts) { processor = parts[0]; audioModel = parts[1]; });
+    }
+    return embedderPromise;
+  }
+
+  // L2-normalize a vector so a dot product equals cosine similarity (CLAP output
+  // isn't pre-normalized, unlike the E5 text embedder).
+  function l2normalize(v) {
+    let n = 0;
+    for (let i = 0; i < v.length; i++) n += v[i] * v[i];
+    n = Math.sqrt(n) || 1;
+    const out = new Float32Array(v.length);
+    for (let i = 0; i < v.length; i++) out[i] = v[i] / n;
+    return out;
+  }
+
+  // ── Decode a dropped File/Blob to mono Float32Array PCM at TARGET_RATE. The
+  // browser's codecs handle the format; an OfflineAudioContext resamples and
+  // downmixes to mono in one render pass. (CLAP's own load_audio does the same
+  // internally, but only from a URL — so we do it here for dropped files.) ──
+  async function fileToPCM(file, rate) {
+    const buf = await file.arrayBuffer();
+    const AC = window.AudioContext || window.webkitAudioContext;
+    const ac = new AC();
+    let decoded;
+    try {
+      decoded = await ac.decodeAudioData(buf);
+    } finally {
+      ac.close();
+    }
+    if (decoded.numberOfChannels === 1 && Math.abs(decoded.sampleRate - rate) < 1) {
+      return { pcm: decoded.getChannelData(0), duration: decoded.duration };
+    }
+    const frames = Math.max(1, Math.ceil(decoded.duration * rate));
+    const off = new OfflineAudioContext(1, frames, rate);
+    const src = off.createBufferSource();
+    src.buffer = decoded;
+    src.connect(off.destination);
+    src.start();
+    const rendered = await off.startRendering();
+    return { pcm: rendered.getChannelData(0), duration: decoded.duration };
+  }
+
+  // Drop / pick files: decode and stage for building. Nothing is embedded until
+  // the user clicks "Build network".
+  async function stageFiles(fileList) {
+    if (busy) return;
+    const files = Array.from(fileList).filter(function (f) {
+      return /\.(wav|mp3|ogg|flac|m4a|aac)$/i.test(f.name) || (f.type && f.type.indexOf('audio/') === 0);
+    });
+    if (!files.length) { setStatus('No audio files found in that drop.', true); return; }
+
+    // A fresh drop invalidates any previous build.
+    revokeUrls();
+    clips = [];
+    vectors = []; sim = [];
+    controlsEl.hidden = true;
+    buildBtn.hidden = false;
+    clearStage();
+
+    try {
+      setStatus('Decoding ' + files.length + ' clip' + (files.length === 1 ? '' : 's') + '…');
+      const staged = [];
+      for (let i = 0; i < files.length; i++) {
+        try {
+          const dec = await fileToPCM(files[i], TARGET_RATE);
+          staged.push({
+            name: files[i].name.replace(/\.[^.]+$/, ''),
+            url: URL.createObjectURL(files[i]),
+            pcm: dec.pcm,
+            duration: dec.duration
+          });
+        } catch (e) {
+          console.warn('Could not decode', files[i].name, e);
+        }
+      }
+      clips = staged;
+      renderFileList();
+      if (clips.length < 2) {
+        setStatus(clips.length === files.length
+          ? 'Add at least two clips to build a network.'
+          : 'Only ' + clips.length + ' of ' + files.length + ' clips could be decoded — add at least two.', true);
+        buildBtn.disabled = true;
+        return;
+      }
+      setStatus(clips.length + ' clips ready — click “Build network”.');
+      buildBtn.disabled = false;
+      warmModel(); // start the model load in the background now
+    } catch (err) {
+      console.error(err);
+      setStatus('Could not read those files: ' + (err && err.message ? err.message : err), true);
+    }
+  }
+
+  // Run the pipeline on the staged clips, stepping the progress indicator.
+  async function buildNetwork() {
+    if (busy || clips.length < 2) return;
+    busy = true;
+    buildBtn.disabled = true;
+    buildBtn.classList.add('busy');
+    buildBtn.textContent = 'Building…';
+    stageEmpty.hidden = true;
+    startChrono();
+    let ok = false;
+    try {
+      if (!audioModel) {
+        setStatus('Loading the audio model (first time downloads ~34 MB, then cached)…');
+        await warmModel();
+      } else {
+        setStatus('Model ready.');
+        await paint();
+      }
+
+      vectors = [];
+      for (let i = 0; i < clips.length; i++) {
+        setStatus('Listening to ' + (i + 1) + ' of ' + clips.length + '…');
+        await paint();
+        const inputs = await processor(clips[i].pcm);
+        const out = await audioModel(inputs);
+        vectors.push(l2normalize(out.audio_embeds.data));
+      }
+
+      setStatus('Computing similarities…');
+      await paint();
+      computeSimilarity();
+
+      setStatus('Laying out the network…');
+      await paint();
+      buildGraph();
+
+      ok = true;
+      renderStats();
+      setStatus('');
+      controlsEl.hidden = false;
+    } catch (err) {
+      console.error(err);
+      setStatus('Something went wrong: ' + (err && err.message ? err.message : err), true);
+      if (!clips.length || !sim.length) stageEmpty.hidden = false;
+    } finally {
+      stopChrono(ok);
+      busy = false;
+      buildBtn.classList.remove('busy');
+      buildBtn.textContent = 'Build network';
+      buildBtn.disabled = clips.length < 2;
+      buildBtn.hidden = ok; // nothing to rebuild until the clips change
+    }
+  }
+
+  function renderFileList() {
+    fileBlock.hidden = clips.length === 0;
+    fileCountEl.textContent = clips.length + (clips.length === 1 ? ' clip' : ' clips');
+    fileListEl.innerHTML = clips.map(function (d) {
+      return '<li><span class="fname">' + escapeHtml(d.name) + '</span><span>' + d.duration.toFixed(1) + 's</span></li>';
+    }).join('');
+  }
+
+  // Release any object URLs held by the current clips (dropped-file and sample
+  // WAV blobs alike) so we don't leak them across rebuilds.
+  function revokeUrls() {
+    clips.forEach(function (c) { if (c.url) { try { URL.revokeObjectURL(c.url); } catch (e) {} } });
+  }
+
+  // Tear down any drawn graph and bring back the empty-state placeholder.
+  function clearStage() {
+    stopPlayback();
+    if (svg) svg.selectAll('*').remove();
+    if (simulation) { simulation.stop(); simulation = null; }
+    stageEmpty.hidden = false;
+    stageCorner.hidden = true;
+    zoomControls.hidden = true;
+    hideChrono();
+  }
+
+  // Wipe everything back to the initial empty state.
+  function clearAll() {
+    if (busy) return;
+    revokeUrls();
+    clips = []; vectors = []; sim = [];
+    renderFileList();
+    controlsEl.hidden = true;
+    buildBtn.disabled = true;
+    buildBtn.hidden = false;
+    setStatus('');
+    fileInput.value = '';
+    clearStage();
+  }
+
+  // Load the built-in sample corpus and stage it for building.
+  function loadSamples() {
+    if (busy) return;
+    revokeUrls();
+    clips = makeSampleClips();
+    vectors = []; sim = [];
+    renderFileList();
+    controlsEl.hidden = true;
+    buildBtn.hidden = false;
+    clearStage();
+    setStatus(clips.length + ' sample clips ready — click “Build network”.');
+    buildBtn.disabled = false;
+    warmModel(); // start the model load in the background now
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+
+  function computeSimilarity() {
+    const n = vectors.length;
+    sim = Array.from({ length: n }, function () { return new Array(n).fill(0); });
+    for (let i = 0; i < n; i++) {
+      for (let j = i + 1; j < n; j++) {
+        let dot = 0;
+        const a = vectors[i], b = vectors[j];
+        for (let k = 0; k < a.length; k++) dot += a[k] * b[k];
+        sim[i][j] = sim[j][i] = dot;
+      }
+    }
+  }
+
+  // Each node links to its single strongest neighbour, if it clears the threshold.
+  function buildLinks(threshold) {
+    const n = clips.length;
+    const seen = new Set();
+    const links = [];
+    for (let i = 0; i < n; i++) {
+      let bestJ = -1, bestS = -Infinity;
+      for (let j = 0; j < n; j++) {
+        if (i === j) continue;
+        if (sim[i][j] > bestS) { bestS = sim[i][j]; bestJ = j; }
+      }
+      if (bestJ >= 0 && bestS > threshold) {
+        const key = i < bestJ ? i + ':' + bestJ : bestJ + ':' + i;
+        if (!seen.has(key)) { seen.add(key); links.push({ source: i, target: bestJ, value: bestS }); }
+      }
+    }
+    return links;
+  }
+
+  // A one-line summary of the current network at the active threshold.
+  function networkStats() {
+    const n = clips.length;
+    const links = buildLinks(+thresholdEl.value);
+    const connected = new Set();
+    links.forEach(function (l) { connected.add(l.source); connected.add(l.target); });
+    const isolated = n - connected.size;
+
+    let strongest = 0, sum = 0, count = 0;
+    for (let i = 0; i < n; i++) {
+      for (let j = i + 1; j < n; j++) {
+        const s = sim[i][j];
+        if (s > strongest) strongest = s;
+        sum += s; count++;
+      }
+    }
+    const avg = count ? sum / count : 0;
+
+    const clusters = countClusters(links, n);
+    return [
+      n + ' clips',
+      links.length + (links.length === 1 ? ' edge' : ' edges'),
+      clusters + (clusters === 1 ? ' cluster' : ' clusters'),
+      isolated + ' unconnected',
+      'strongest link ' + strongest.toFixed(2),
+      'avg similarity ' + avg.toFixed(2)
+    ];
+  }
+
+  // Show the stats overlay in the top-right corner of the graph, one stat
+  // per line.
+  function renderStats() {
+    if (!sim.length) return;
+    const parts = networkStats();
+    if (lastBuildSecs != null) parts.push('built in ' + lastBuildSecs + 's');
+    statsEl.innerHTML = parts.map(function (p) { return '<span>' + escapeHtml(p) + '</span>'; }).join('');
+    stageCorner.hidden = false;
+    zoomControls.hidden = false;
+  }
+
+  // Connected components over the current links (isolated nodes count as their
+  // own single-node cluster).
+  function countClusters(links, n) {
+    const parent = Array.from({ length: n }, function (_, i) { return i; });
+    function find(x) { while (parent[x] !== x) { parent[x] = parent[parent[x]]; x = parent[x]; } return x; }
+    links.forEach(function (l) { parent[find(l.source)] = find(l.target); });
+    const roots = new Set();
+    for (let i = 0; i < n; i++) roots.add(find(i));
+    return roots.size;
+  }
+
+  // ── Click-to-play: one shared audio element; clicking a node plays its clip. ──
+  const player = new Audio();
+  let playingIdx = -1;
+  player.addEventListener('ended', function () { markPlaying(-1); });
+
+  function markPlaying(i) {
+    playingIdx = i;
+    if (nodeSel) nodeSel.classed('playing', function (d) { return d.i === i; });
+  }
+
+  function playClip(d) {
+    const clip = clips[d.i];
+    if (!clip || !clip.url) return;
+    // Clicking the already-playing node stops it.
+    if (playingIdx === d.i && !player.paused) { stopPlayback(); return; }
+    try {
+      player.src = clip.url;
+      player.currentTime = 0;
+      const p = player.play();
+      if (p && p.catch) p.catch(function () {});
+      markPlaying(d.i);
+    } catch (e) { /* ignore playback errors */ }
+  }
+
+  function stopPlayback() {
+    try { player.pause(); } catch (e) {}
+    markPlaying(-1);
+  }
+
+  // ── Live force graph (reuses the Network page's visual classes) ──
+  let svg, zoomLayer, zoomBehavior, nodeSel, linkSel, labelSel, simulation, nodes;
+  let labelsOn = false;
+  let elevationOn = false;
+  let lastContourAt = 0; // throttle: contourDensity is too heavy to run every tick
+
+  function displayName(name) { return name; }
+
+  function stageDim() {
+    const stage = document.querySelector('#network-view .stage');
+    return { w: stage.clientWidth, h: stage.clientHeight };
+  }
+
+  // Edge resting length: the "Link distance" slider sets the floor, and weaker
+  // similarities are stretched a little further apart.
+  function linkDistance(d) {
+    return (+linkdistEl.value) + (1 - d.value) * 45;
+  }
+
+  function buildGraph() {
+    const dim = stageDim();
+    nodes = clips.map(function (d, i) { return { i: i, name: d.name }; });
+
+    svg = d3.select('#net');
+    svg.selectAll('*').remove();
+    // Everything lives inside one zoom layer so a single transform pans/zooms
+    // the whole graph — nodes, links, labels and contours together.
+    zoomLayer = svg.append('g').attr('class', 'zoom-layer');
+    zoomLayer.append('g').attr('class', 'contours'); // behind everything else
+    const linkLayer = zoomLayer.append('g').attr('class', 'links');
+    const nodeLayer = zoomLayer.append('g').attr('class', 'nodes');
+    const labelLayer = zoomLayer.append('g').attr('class', 'labels'); // topmost
+
+    // Wheel / pinch to zoom, drag the background to pan. Node drags stop event
+    // propagation before it reaches this, so grabbing a node never pans.
+    zoomBehavior = d3.zoom().scaleExtent([0.2, 8])
+      .on('zoom', function (e) { zoomLayer.attr('transform', e.transform); });
+    svg.call(zoomBehavior).on('dblclick.zoom', null);
+    svg.call(zoomBehavior.transform, d3.zoomIdentity); // reset on rebuild
+
+    let links = buildLinks(+thresholdEl.value);
+
+    linkSel = linkLayer.selectAll('line');
+    labelSel = labelLayer.selectAll('text').data(nodes).enter().append('text');
+
+    const nodeEnter = nodeLayer.selectAll('g.node').data(nodes).enter()
+      .append('g').attr('class', 'node draggable');
+    nodeEnter.append('circle').attr('class', 'hit').attr('r', 12);
+    nodeEnter.append('circle').attr('class', 'marker').attr('r', NODE_RADIUS);
+    nodeEnter.append('circle').attr('class', 'ring').attr('r', NODE_RADIUS + 2);
+    nodeSel = nodeEnter;
+
+    nodeSel
+      .on('mouseenter', function (e, d) { d3.select(this).classed('hover', true); setLabel(d.i, d.name); })
+      .on('mouseleave', function (e, d) { d3.select(this).classed('hover', false); setLabel(d.i, labelsOn ? displayName(d.name) : ''); })
+      .call(d3.drag()
+        .on('start', function (e, d) { d.__x0 = e.x; d.__y0 = e.y; d.__moved = false; if (!e.active) simulation.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; d3.select(this).classed('dragging', true); })
+        .on('drag', function (e, d) { if (Math.hypot(e.x - d.__x0, e.y - d.__y0) > 3) d.__moved = true; d.fx = e.x; d.fy = e.y; })
+        .on('end', function (e, d) { if (!e.active) simulation.alphaTarget(0); d.fx = null; d.fy = null; d3.select(this).classed('dragging', false); if (!d.__moved) playClip(d); }));
+
+    simulation = d3.forceSimulation(nodes)
+      .force('link', d3.forceLink(links).id(function (d) { return d.i; })
+        .distance(linkDistance)
+        .strength(function (d) { return 0.5 + d.value * 0.5; }))
+      .force('charge', d3.forceManyBody().strength(-(+chargeEl.value)).distanceMax(520))
+      .force('center', d3.forceCenter(dim.w / 2, dim.h / 2))
+      .force('x', d3.forceX(dim.w / 2).strength(+gravityEl.value))
+      .force('y', d3.forceY(dim.h / 2).strength(+gravityEl.value))
+      .force('collide', d3.forceCollide().radius(NODE_RADIUS + (+spacingEl.value)))
+      .on('tick', ticked)
+      .on('end', function () { if (elevationOn) drawContours(); });
+
+    markPlaying(playingIdx);
+    drawLinks(links);
+    applyLabels();
+    applyFontSizes();
+    drawContours();
+  }
+
+  // ── Elevation map: topographic density contours over the node positions. ──
+  function drawContours() {
+    if (!svg) return;
+    const layer = svg.select('g.contours');
+    if (!elevationOn || !nodes) { layer.selectAll('*').remove(); return; }
+    const placed = nodes.filter(function (d) { return d.x != null && d.y != null; });
+    if (placed.length < 2) { layer.selectAll('*').remove(); return; }
+    const dim = stageDim();
+    const density = d3.contourDensity()
+      .x(function (d) { return d.x; })
+      .y(function (d) { return d.y; })
+      .size([dim.w, dim.h])
+      .cellSize(8)
+      .bandwidth(+elevBandwidthEl.value);
+    const peak = d3.max(density.thresholds(40)(placed), function (c) { return c.value; }) || 0;
+    const levels = +elevLevelsEl.value;
+    const step = peak / (levels + 1);
+    const thresholds = [];
+    for (let k = 1; k <= levels && step > 0; k++) thresholds.push(k * step);
+    const contours = density.thresholds(thresholds)(placed);
+    const geoPath = d3.geoPath();
+    const sel = layer.selectAll('path').data(contours);
+    sel.exit().remove();
+    sel.enter().append('path').merge(sel).attr('d', geoPath);
+  }
+
+  // Drive the label font size from the slider (as a CSS variable the .labels
+  // rule reads, so new text inherits the size too).
+  function applyFontSizes() {
+    if (!svg) return;
+    svg.style('--label-size', labelSizeEl.value + 'px');
+  }
+
+  // Show every node's name when the labels switch is on; otherwise leave labels
+  // to hover.
+  function applyLabels() {
+    if (!labelSel || !nodes) return;
+    nodes.forEach(function (n) { setLabel(n.i, labelsOn ? displayName(n.name) : ''); });
+  }
+
+  // Stable key for a link, whether its endpoints are still indices (freshly
+  // built) or node objects (once forceLink has resolved them).
+  function linkKey(d) {
+    const s = d.source.i != null ? d.source.i : d.source;
+    const t = d.target.i != null ? d.target.i : d.target;
+    return s < t ? s + ':' + t : t + ':' + s;
+  }
+
+  function drawLinks(links) {
+    linkSel = svg.select('g.links').selectAll('line').data(links, linkKey);
+    linkSel.exit().remove();
+    linkSel = linkSel.enter().append('line').attr('class', 'link').merge(linkSel);
+  }
+
+  function ticked() {
+    if (linkSel) linkSel
+      .attr('x1', function (d) { return d.source.x; }).attr('y1', function (d) { return d.source.y; })
+      .attr('x2', function (d) { return d.target.x; }).attr('y2', function (d) { return d.target.y; });
+    nodeSel.attr('transform', function (d) { return 'translate(' + d.x + ',' + d.y + ')'; });
+    labelSel.attr('transform', function (d) { return 'translate(' + d.x + ',' + d.y + ')'; });
+    if (elevationOn) {
+      const now = performance.now();
+      if (now - lastContourAt > 90) { lastContourAt = now; drawContours(); }
+    }
+  }
+
+  function setLabel(i, name) {
+    const el = labelSel.filter(function (d) { return d.i === i; });
+    el.selectAll('tspan').remove();
+    if (name) el.append('tspan').attr('x', 0).attr('y', 0).text(name);
+  }
+
+  const SVGNS = 'http://www.w3.org/2000/svg';
+
+  // Build a standalone, self-contained SVG of the current graph. External CSS
+  // won't travel with a downloaded file, so concrete colours/fonts are inlined
+  // and a background rect is drawn in.
+  function buildStandaloneSVG(scale) {
+    const dim = stageDim();
+    const w = dim.w, h = dim.h;
+    const sw = Math.round(w * scale), sh = Math.round(h * scale);
+
+    const root = getComputedStyle(document.documentElement);
+    const fg = (root.getPropertyValue('--fg') || '#000').trim();
+    const bg = (root.getPropertyValue('--bg') || '#fff').trim();
+    let fontFamily = 'sans-serif', fontSize = '11px';
+    const oneLabel = svg.select('.labels text').node();
+    if (oneLabel) {
+      const cs = getComputedStyle(oneLabel);
+      fontFamily = cs.fontFamily || fontFamily;
+      fontSize = cs.fontSize || fontSize;
+    }
+
+    const clone = svg.node().cloneNode(true);
+    clone.setAttribute('xmlns', SVGNS);
+    clone.setAttribute('width', sw);
+    clone.setAttribute('height', sh);
+    clone.setAttribute('viewBox', '0 0 ' + w + ' ' + h);
+    clone.querySelectorAll('.hit, .ring').forEach(function (n) { n.remove(); });
+
+    const style = document.createElementNS(SVGNS, 'style');
+    style.textContent =
+      '.contours path{fill:none;stroke:' + fg + ';stroke-opacity:0.3;stroke-width:0.5}' +
+      '.marker{fill:' + bg + ';stroke:' + fg + ';stroke-width:0.5}' +
+      '.link{stroke:' + fg + ';stroke-width:0.5}' +
+      '.labels text{font-family:' + fontFamily + ';font-size:' + fontSize + ';fill:' + fg +
+      ';text-anchor:middle;dominant-baseline:central;paint-order:stroke;stroke:' + bg + ';stroke-width:3px;stroke-linejoin:round}';
+
+    const rect = document.createElementNS(SVGNS, 'rect');
+    rect.setAttribute('width', w);
+    rect.setAttribute('height', h);
+    rect.setAttribute('fill', bg);
+    clone.insertBefore(rect, clone.firstChild);
+    clone.insertBefore(style, clone.firstChild);
+
+    return { svgStr: new XMLSerializer().serializeToString(clone), sw: sw, sh: sh };
+  }
+
+  // Trigger a download of `blob` under `filename`.
+  function downloadBlob(blob, filename) {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
+  }
+
+  // Rasterise the standalone SVG to a PNG at the given pixel scale and download.
+  function exportPNG(scale) {
+    if (!svg || !nodes) { setStatus('Build a network before downloading.', true); return; }
+    const out = buildStandaloneSVG(scale);
+    const url = URL.createObjectURL(new Blob([out.svgStr], { type: 'image/svg+xml;charset=utf-8' }));
+    const img = new Image();
+    img.onload = function () {
+      const canvas = document.createElement('canvas');
+      canvas.width = out.sw;
+      canvas.height = out.sh;
+      canvas.getContext('2d').drawImage(img, 0, 0);
+      URL.revokeObjectURL(url);
+      canvas.toBlob(function (blob) {
+        if (!blob) { setStatus('Could not create the PNG.', true); return; }
+        downloadBlob(blob, 'affinity-audio@' + scale + 'x.png');
+      }, 'image/png');
+    };
+    img.onerror = function () { URL.revokeObjectURL(url); setStatus('Could not render the image for download.', true); };
+    img.src = url;
+  }
+
+  // Download the graph as a resolution-independent vector SVG.
+  function exportSVG() {
+    if (!svg || !nodes) { setStatus('Build a network before downloading.', true); return; }
+    const out = buildStandaloneSVG(1);
+    downloadBlob(new Blob([out.svgStr], { type: 'image/svg+xml;charset=utf-8' }), 'affinity-audio.svg');
+  }
+
+  // Reheat the simulation so a force change takes visible effect.
+  function nudge() { if (simulation) simulation.alpha(0.6).restart(); }
+
+  // ── Threshold slider: rebuild links live ──
+  thresholdEl.addEventListener('input', function () {
+    thresholdVal.textContent = (+thresholdEl.value).toFixed(2);
+    if (!simulation) return;
+    const links = buildLinks(+thresholdEl.value);
+    simulation.force('link').links(links);
+    drawLinks(links);
+    simulation.alpha(0.6).restart();
+    renderStats();
+  });
+
+  // ── Repulsion: charge strength ──
+  chargeEl.addEventListener('input', function () {
+    chargeVal.textContent = chargeEl.value;
+    if (simulation) simulation.force('charge').strength(-(+chargeEl.value));
+    nudge();
+  });
+
+  // ── Gravity: pull toward the centre ──
+  gravityEl.addEventListener('input', function () {
+    gravityVal.textContent = (+gravityEl.value).toFixed(2);
+    if (simulation) {
+      simulation.force('x').strength(+gravityEl.value);
+      simulation.force('y').strength(+gravityEl.value);
+    }
+    nudge();
+  });
+
+  // ── Node spacing: collision radius ──
+  spacingEl.addEventListener('input', function () {
+    spacingVal.textContent = spacingEl.value;
+    if (simulation) simulation.force('collide').radius(NODE_RADIUS + (+spacingEl.value));
+    nudge();
+  });
+
+  // ── Link distance: edge resting length ──
+  linkdistEl.addEventListener('input', function () {
+    linkdistVal.textContent = linkdistEl.value;
+    if (simulation) simulation.force('link').distance(linkDistance);
+    nudge();
+  });
+
+  // ── Labels on/off (label size lives in the labels sub-panel) ──
+  labelsToggle.addEventListener('change', function () {
+    labelsOn = labelsToggle.checked;
+    labelsSub.hidden = !labelsOn;
+    applyLabels();
+  });
+
+  // ── Node label font size ──
+  labelSizeEl.addEventListener('input', function () {
+    labelSizeVal.textContent = labelSizeEl.value;
+    applyFontSizes();
+  });
+
+  // ── Elevation map on/off (smoothing + levels are sub-options) ──
+  elevationToggle.addEventListener('change', function () {
+    elevationOn = elevationToggle.checked;
+    elevationSub.hidden = !elevationOn;
+    lastContourAt = 0;
+    drawContours();
+  });
+
+  // ── Elevation smoothing (contour bandwidth) ──
+  elevBandwidthEl.addEventListener('input', function () {
+    elevBandwidthVal.textContent = elevBandwidthEl.value;
+    if (elevationOn) { lastContourAt = 0; drawContours(); }
+  });
+
+  // ── Elevation levels (contour thresholds) ──
+  elevLevelsEl.addEventListener('input', function () {
+    elevLevelsVal.textContent = elevLevelsEl.value;
+    if (elevationOn) { lastContourAt = 0; drawContours(); }
+  });
+
+  // ── PNG export at 4× ──
+  document.querySelectorAll('.export-btn[data-scale]').forEach(function (b) {
+    b.addEventListener('click', function () { exportPNG(+b.dataset.scale); });
+  });
+
+  // ── SVG (vector) export ──
+  document.getElementById('export-svg').addEventListener('click', exportSVG);
+
+  // ── Zoom buttons: scale about the graph centre, matching wheel zoom ──
+  function zoomByFactor(k) {
+    if (!svg || !zoomBehavior) return;
+    svg.transition().duration(200).call(zoomBehavior.scaleBy, k);
+  }
+  document.getElementById('zoom-in').addEventListener('click', function () { zoomByFactor(1.3); });
+  document.getElementById('zoom-out').addEventListener('click', function () { zoomByFactor(1 / 1.3); });
+
+  // ── Drop zone wiring ──
+  ['dragenter', 'dragover'].forEach(function (ev) {
+    dropzone.addEventListener(ev, function (e) { e.preventDefault(); dropzone.classList.add('dragover'); });
+  });
+  ['dragleave', 'drop'].forEach(function (ev) {
+    dropzone.addEventListener(ev, function (e) { e.preventDefault(); dropzone.classList.remove('dragover'); });
+  });
+  dropzone.addEventListener('drop', function (e) { stageFiles(e.dataTransfer.files); });
+  fileInput.addEventListener('change', function () { stageFiles(fileInput.files); });
+  buildBtn.addEventListener('click', buildNetwork);
+  sampleBtn.addEventListener('click', loadSamples);
+  clearBtn.addEventListener('click', clearAll);
+
+  // Keep the simulation centered on resize.
+  let resizeTimer = null;
+  window.addEventListener('resize', function () {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(function () {
+      if (!simulation) return;
+      const dim = stageDim();
+      simulation.force('center', d3.forceCenter(dim.w / 2, dim.h / 2));
+      simulation.force('x').x(dim.w / 2);
+      simulation.force('y').y(dim.h / 2);
+      simulation.alpha(0.3).restart();
+    }, 150);
+  });
+</script>

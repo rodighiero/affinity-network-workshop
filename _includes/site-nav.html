@@ -3,6 +3,7 @@
     <a href="{{ '/' | relative_url }}"{% if page.url == '/' %} class="active" aria-current="page"{% endif %}>Home</a>
     <a href="{{ '/text/' | relative_url }}"{% if page.url contains '/text' %} class="active" aria-current="page"{% endif %}>Text</a>
     <a href="{{ '/network/' | relative_url }}"{% if page.url contains '/network' %} class="active" aria-current="page"{% endif %}>Network</a>
+    <a href="{{ '/audio/' | relative_url }}"{% if page.url contains '/audio' %} class="active" aria-current="page"{% endif %}>Audio</a>
     <a href="{{ '/compare/' | relative_url }}"{% if page.url contains '/compare' %} class="active" aria-current="page"{% endif %}>Compare</a>
   </nav>
   <a class="site-title" href="{{ '/' | relative_url }}">{{ site.title }}</a>

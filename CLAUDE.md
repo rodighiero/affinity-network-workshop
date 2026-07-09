@@ -4,12 +4,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-The companion website for the **Affinity Network Workshop** (a four-day workshop on network design, Bolzano, July 6–9, 2026). It's a small Jekyll site with five pages, and everything analytical runs **client-side in the browser** — nothing is precomputed, committed, or uploaded:
+The companion website for the **Affinity Network Workshop** (a four-day workshop on network design, Bolzano, July 6–9, 2026). It's a small Jekyll site with six pages, and everything analytical runs **client-side in the browser** — nothing is precomputed, committed, or uploaded:
 
 - **Home** (`index.html`, permalink `/`) — workshop description, learning outcomes, approach, and a day-by-day schedule.
 - **Text** (`text.html`, permalink `/text/`) — the "microscope": drop in **one** document and read it in layers (measurements, vocabulary, grammar, entities, readability, sentiment, keywords, recurring phrases, and a paragraph-by-paragraph narrative arc). English only.
 - **Exercises** (`exercises.html`, permalink `/exercises/`) — a static lab of eight close-reading tasks for the Text page, used in the workshop's text-analysis session. Pure content (no JS); styled by `exercises.css`. Each task card maps to Text-page sections and pairs a *Task* with what it teaches (*Learn*); the last few point toward the Network page.
 - **Network** (`network.html`, permalink `/network/`) — the "telescope": drop in a **set** of text files and watch them arrange into a similarity network. Embedding, similarity, and force layout all run in the browser.
+- **Audio** (`audio.html`, permalink `/audio/`) — the telescope for **sound**: drop in a **set of short audio clips** and watch them arrange into a similarity network by how they *sound*. Embedding (CLAP), similarity, and force layout all run in the browser; click a node to hear its clip. Reuses the Network page's similarity/force-layout engine.
 - **Compare** (`compare.html`, permalink `/compare/`) — two documents side by side: drop **one file in each of two slots**, and each *paragraph* becomes a node in a similarity network, coloured by its source document. Cross-document links are drawn as prominent "bridges" (shared themes = *common language*), within-document links stay faint (each text's own texture = *specific language*), and a three-column panel below the graph lists each document's own vocabulary and the words they share. Reuses the Network page's embedding/similarity/force-layout engine.
 
 > History: the site previously rendered a *pre-baked* publication graph computed offline in Python. That is gone, along with its `_publications/` abstracts and `scripts/`. If you find references to `_data/network.json`, a `network` layout, or "baked positions", they're stale — nothing in the current site produces or consumes them.
@@ -47,6 +48,16 @@ On **Build network**:
 - **Stats overlay** (top-right of the graph): files, edges, clusters (union-find over links), unconnected, strongest/avg similarity, and "built in Ns". Recomputes live on threshold change.
 - **PNG export** at 1×/2×/4×: `exportPNG(scale)` clones the SVG, inlines colours/fonts (external CSS doesn't apply to an SVG-in-`<img>`), and rasterises at the scaled size for crisp output. Label fonts may fall back to a system sans in the export.
 - A built-in `SAMPLE_DOCS` corpus lets the page be tried without user files.
+
+### The Audio page (`audio.html`)
+
+A near-copy of the Network builder for **sound** instead of text, so it shares `network.css` + `studio.css` (plus its own `audio.css`) and the same `#network-view` markup, force simulation, elevation map, zoom, and PNG/SVG export. The differences are all about audio:
+
+- **Input** — dropped `.wav`/`.mp3`/`.ogg`/`.m4a` files (or the synthesized sample set). Each clip is decoded to a **mono Float32Array at 48 kHz** by `fileToPCM()` (`AudioContext.decodeAudioData` + an `OfflineAudioContext` for resample/downmix — done at *stage* time, so the file list can show durations). Every clip is a node `{ name, url, pcm, duration }`, where `name` is the filename (no `titleFromText`), `url` is an object URL for playback, and the array is `clips` (playing the role `docs` plays on the Network page).
+- **Embedding** — **CLAP** (`Xenova/clap-htsat-unfused`) via Transformers.js, loaded through `AutoProcessor` + `ClapAudioModelWithProjection` (the `dtype: 'q8'` audio tower only, ~34 MB — *not* the 500–600 MB text/combined ONNX). `warmModel()` preloads both as soon as clips are staged. Per clip: `processor(pcm)` → `audioModel(...)` → `audio_embeds` (a fixed **512-dim** vector), L2-normalized (`l2normalize()`, since CLAP output isn't pre-normalized) so cosine is a dot product. Everything downstream — `computeSimilarity`, `buildLinks`, the force graph, stats, export — is reused unchanged.
+- **Click-to-play** — a single shared `Audio` element; clicking a node plays that clip (clicking the playing one stops it), gated on "not dragged" via a small movement threshold in the `d3.drag` handlers. The playing node carries a `.playing` class (accent `--playing` in `audio.css`).
+- **Sample set** — synthesized in-browser (`SAMPLE_SPECS` → `synthClip()` → `encodeWAV()`), so **no binary audio is committed**. Five families (pure tones, chords, noise, rhythmic pulses, gliding sweeps) that CLAP clusters cleanly.
+- No keyword/edge-keyword layer (audio has no vocabulary); the Network page's TF-IDF code is dropped here, and only the **Label size** label control is kept (labels are just filenames). CLAP pads/truncates to a fixed ~10 s window, so short clips work best.
 
 ### The Compare page (`compare.html`)
 

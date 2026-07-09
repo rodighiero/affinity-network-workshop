@@ -1,0 +1,33 @@
+/* ── Audio: a similarity network over short sound clips ── */
+/* Reuses the Network page's studio chrome and force-graph classes; this sheet
+   only adds what is specific to audio: an accent for the currently-playing
+   clip, and the clip-duration text in the file list. */
+
+/* Accent for the playing node. Restrained teal, distinct in light and dark;
+   set on #network-view so descendants inherit it. */
+#network-view {
+  --playing: #1f8b6f;
+}
+html.dark #network-view {
+  --playing: #6fd4b4;
+}
+
+/* The currently-playing clip: filled accent marker with a visible ring, so it
+   stands out from the plain outlined markers. */
+#network-view .node.playing .marker {
+  fill: var(--playing);
+  stroke: var(--playing);
+}
+#network-view .node.playing .ring {
+  stroke: var(--playing);
+  opacity: 1;
+}
+
+/* Nodes are clickable to play — hint it on hover. */
+#network-view .node .hit { cursor: pointer; }
+
+/* Clip durations in the loaded-file list sit muted at the row's end, like the
+   Network page's character counts. */
+#network-view .file-list li > span:last-child {
+  font-variant-numeric: tabular-nums;
+}

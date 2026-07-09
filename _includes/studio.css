@@ -6,6 +6,10 @@
   font-size: var(--text-xs);
   line-height: var(--lh-normal);
   align-self: start;
+  /* Let the grid track keep its 1fr share instead of growing to fit an
+     unbreakable child (e.g. a long, space-less filename). Without this the
+     column blows out and the file name's ellipsis never engages. */
+  min-width: 0;
 }
 .studio-col .lede { color: var(--muted); margin: 0 0 1.2rem; }
 .col-head {
